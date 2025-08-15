@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Produtos (Admin)</h1>
+<a href="{% url 'produto_admin_create' %}">Novo produto</a>
+<form method="get">
+  <input type="text" name="search" placeholder="Pesquisar...">
+  <button>Pesquisar</button>
+</form>
+<table>
+  <tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Ações</th></tr>
+  {% for p in produtos %}
+  <tr>
+    <td>{{ p.nome }}</td>
+    <td>{{ p.categoria }}</td>
+    <td>{{ p.preco }}</td>
+    <td>
+      <a href="{% url 'produto_admin_edit' p.id %}">Editar</a> |
+      <a href="{% url 'produto_admin_delete' p.id %}">Deletar</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
