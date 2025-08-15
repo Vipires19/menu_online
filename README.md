@@ -92,8 +92,13 @@ http://127.0.0.1:8000/
 ---
 
 ## 📷 Exemplo de Tela
+Tela inicial
 ![Início](docs/images/inicio.png)
+
+Detalhes do produto
 ![Detalhes do produto](docs/images/detalhes.png)
+
+Adicionar novos produtos
 ![Adicionar novos produtos](docs/images/adicionar_produto.png)
 ---
 
