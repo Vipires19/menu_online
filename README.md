@@ -92,9 +92,10 @@ http://127.0.0.1:8000/
 ---
 
 ## 📷 Exemplo de Tela
-*(Adicione aqui prints do sistema depois)*
-
+![Início](docs/images/inicio.png)
+![Detalhes do produto](docs/images/detalhes.png)
+![Adicionar novos produtos](docs/images/adicionar_produto.png)
 ---
 
 ## 📄 Licença
-Este projeto está sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+Este projeto está sob a licença MIT
