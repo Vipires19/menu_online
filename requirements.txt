@@ -1,0 +1,9 @@
+# Dependências do projeto
+Django==4.2.7
+mongoengine==0.24.2
+pymongo==3.12.3
+Pillow==10.1.0
+python-decouple==3.8
+dnspython==2.4.2
+python-dotenv==1.0.0
+django-mongoengine
