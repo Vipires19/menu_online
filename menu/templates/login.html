@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Restaurant Menu</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: oklch(1 0 0);
+            color: oklch(0.145 0 0);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .login-container {
+            background: oklch(1 0 0);
+            border: 1px solid oklch(0.922 0 0);
+            border-radius: 0.625rem;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header h2 {
+            color: oklch(0.205 0 0);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: oklch(0.556 0 0);
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: oklch(0.205 0 0);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid oklch(0.922 0 0);
+            border-radius: calc(0.625rem - 2px);
+            font-size: 1rem;
+            background: oklch(1 0 0);
+            color: oklch(0.145 0 0);
+            transition: all 0.2s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: oklch(0.205 0 0);
+            box-shadow: 0 0 0 2px oklch(0.708 0 0 / 0.2);
+        }
+
+        .form-group input::placeholder {
+            color: oklch(0.556 0 0);
+        }
+
+        .login-button {
+            width: 100%;
+            background: oklch(0.205 0 0);
+            color: oklch(0.985 0 0);
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: calc(0.625rem - 2px);
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .login-button:hover {
+            background: oklch(0.145 0 0);
+            transform: translateY(-1px);
+        }
+
+        .login-button:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            background: oklch(0.577 0.245 27.325 / 0.1);
+            color: oklch(0.577 0.245 27.325);
+            padding: 0.75rem;
+            border-radius: calc(0.625rem - 2px);
+            margin-bottom: 1rem;
+            border: 1px solid oklch(0.577 0.245 27.325 / 0.2);
+        }
+
+        .forgot-password {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+
+        .forgot-password a {
+            color: oklch(0.205 0 0);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s ease;
+        }
+
+        .forgot-password a:hover {
+            color: oklch(0.145 0 0);
+            text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 1.5rem;
+                margin: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h2>Login</h2>
+            <p>Acesse sua conta do Restaurant Menu</p>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="error-message">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label for="username">Usuário:</label>
+                <input 
+                    type="text" 
+                    id="username"
+                    name="username" 
+                    placeholder="Digite seu usuário"
+                    required
+                    autocomplete="username"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Senha:</label>
+                <input 
+                    type="password" 
+                    id="password"
+                    name="password" 
+                    placeholder="Digite sua senha"
+                    required
+                    autocomplete="current-password"
+                >
+            </div>
+
+            <button type="submit" class="login-button">
+                Entrar
+            </button>
+        </form>
+
+        <div class="forgot-password">
+            <a href="#">Esqueceu sua senha?</a>
+        </div>
+    </div>
+</body>
+</html>
