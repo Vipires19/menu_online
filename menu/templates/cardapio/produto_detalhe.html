@@ -72,10 +72,11 @@
                 
                 <!-- Botões de ação -->
                 <div class="d-grid gap-2">
-                    <button class="btn btn-custom btn-lg" onclick="adicionarAoCarrinho()">
+                    <a href="https://wa.me/5516997759610?text=Olá!%20Gostaria%20de%20fazer%20um%20pedido!" 
+                    class="btn btn-custom btn-lg" target="_blank">
                         <i class="fas fa-shopping-cart me-2"></i>
-                        Adicionar ao Carrinho
-                    </button>
+                        Fazer Pedido
+                    </a>
                     <button class="btn btn-outline-success" onclick="compartilhar()">
                         <i class="fas fa-share me-2"></i>
                         Compartilhar
@@ -94,11 +95,27 @@
             Outros produtos da categoria "{{ produto.categoria }}"
         </h3>
         
-        <!-- Aqui você pode adicionar uma query para buscar produtos relacionados -->
+        {% if produtos_relacionados %}
+        <div class="row">
+            {% for p in produtos_relacionados %}
+            <div class="col-md-3 mb-3">
+                <div class="card shadow-sm">
+                    <img src="{{ p.imagem_url }}" class="card-img-top" style="height:200px; object-fit:cover;">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ p.nome }}</h5>
+                        <p class="card-text">R$ {{ p.preco }}</p>
+                        <a href="{% url 'produto_detalhe' p.id %}" class="btn btn-sm btn-primary">Ver Detalhes</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
         <div class="alert alert-info">
             <i class="fas fa-info-circle me-2"></i>
-            Seção para produtos relacionados (implementar posteriormente)
+            Nenhum outro produto nesta categoria.
         </div>
+        {% endif %}
     </div>
 </div>
 
