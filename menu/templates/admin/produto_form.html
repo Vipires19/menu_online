@@ -1,29 +1,41 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{% if produto %}Editar{% else %}Novo{% endif %} Produto</h1>
+<!-- Top bar com logout -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1>{% if produto %}Editar{% else %}Novo{% endif %} Produto</h1>
+  <form action="{% url 'logout' %}" method="post" style="margin:0;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-custom">Logout</button>
+  </form>
+</div>
+
 <form method="post" enctype="multipart/form-data">
   {% csrf_token %}
   {{ form.as_p }}
   <h3>Adicionais</h3>
   <div id="adicionais-container">
     {% for a in adicionais %}
-    <div class="item">
-      <input type="text" name="adicional_nome" value="{{ a.nome }}" />
-      <input type="number" step="0.01" name="adicional_preco" value="{{ a.preco }}" />
-      <button type="button" onclick="this.parentElement.remove()">Remover</button>
+    <div class="item mb-2">
+      <input type="text" name="adicional_nome" value="{{ a.nome }}" class="form-control mb-1" />
+      <input type="number" step="0.01" name="adicional_preco" value="{{ a.preco }}" class="form-control mb-1" />
+      <button type="button" onclick="this.parentElement.remove()" class="btn btn-outline-danger btn-sm">Remover</button>
     </div>
     {% endfor %}
   </div>
-  <button type="button" onclick="addAdicional()">Adicionar adicional</button>
-  <button type="submit">Salvar</button>
+  <button type="button" onclick="addAdicional()" class="btn btn-outline-primary mb-3">Adicionar adicional</button>
+  <button type="submit" class="btn btn-custom">Salvar</button>
 </form>
 
 <script>
 function addAdicional(){
   const c = document.getElementById('adicionais-container');
   const div = document.createElement('div');
-  div.className = 'item';
-  div.innerHTML = `<input type="text" name="adicional_nome" placeholder="Nome"><input type="number" step="0.01" name="adicional_preco" placeholder="Preço"><button type="button" onclick="this.parentElement.remove()">Remover</button>`;
+  div.className = 'item mb-2';
+  div.innerHTML = `
+    <input type="text" name="adicional_nome" placeholder="Nome" class="form-control mb-1">
+    <input type="number" step="0.01" name="adicional_preco" placeholder="Preço" class="form-control mb-1">
+    <button type="button" onclick="this.parentElement.remove()" class="btn btn-outline-danger btn-sm">Remover</button>
+  `;
   c.appendChild(div);
 }
 </script>
