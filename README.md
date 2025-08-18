@@ -103,4 +103,4 @@ Adicionar novos produtos
 ---
 
 ## 📄 Licença
-Este projeto está sob a licença MIT
+MIT License - sinta-se livre para usar, adaptar e contribuir!
