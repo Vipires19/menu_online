@@ -48,26 +48,25 @@ def lista_produtos(request):
     return render(request, 'cardapio/lista_produtos.html', context)
 
 def produto_detalhe(request, produto_id):
-    """
-    View que exibe os detalhes de um produto específico
-    Usa o ID do MongoDB para buscar o produto
-    """
+    # Busca o produto pelo ObjectId (MongoEngine)
     try:
-        # Busca o produto pelo ID do MongoDB
-        produto = Produto.objects.get(id=produto_id, disponivel=True)
-    except DoesNotExist:
+        produto = Produto.objects.get(id=produto_id)
+    except Produto.DoesNotExist:
         raise Http404("Produto não encontrado")
     
-    # Busca produtos relacionados (mesma categoria)
+    # Adicionais disponíveis
+    adicionais = produto.adicionais if hasattr(produto, 'adicionais') else []
+    
+    # Produtos da mesma categoria, exceto o atual
     produtos_relacionados = Produto.objects(
         categoria=produto.categoria,
-        disponivel=True,
-        id__ne=produto.id  # Exclui o produto atual
-    ).limit(4)
+        id__ne=produto.id
+    ).order_by('nome')[:4]  # limitar a 4 itens, por exemplo
     
     context = {
         'produto': produto,
-        'produtos_relacionados': produtos_relacionados,
+        'adicionais': adicionais,
+        'produtos_relacionados': produtos_relacionados
     }
     
     return render(request, 'cardapio/produto_detalhe.html', context)

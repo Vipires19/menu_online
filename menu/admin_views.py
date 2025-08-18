@@ -6,6 +6,8 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from .forms import ProdutoForm, AdicionalForm
 from .models import Produto, Adicional
+from django.contrib.auth.decorators import login_required
+from django.http import Http404
 
 # Helper para salvar imagem no storage padrão e gravar o caminho em produto.imagem
 def _save_uploaded_image_on_produto(produto, uploaded_file):
@@ -18,7 +20,7 @@ def _save_uploaded_image_on_produto(produto, uploaded_file):
     produto.imagem = saved_path
     return saved_path
 
-@staff_required
+@login_required
 def produtos_admin_list(request):
     qs = Produto.objects.order_by('nome')
     search = request.GET.get('search', '').strip()
@@ -35,7 +37,7 @@ def produtos_admin_list(request):
         'categoria': categoria
     })
 
-@staff_required
+@login_required
 def produto_admin_form(request, pk=None):
     # Busca seguro do produto (pode ser novo)
     produto = None
@@ -110,8 +112,12 @@ def produto_admin_form(request, pk=None):
         'adicionais': adicionais
     })
 
-@staff_required
+@login_required
 def produto_admin_delete(request, pk):
-    produto = get_object_or_404(Produto, id=pk)
+    try:
+        produto = Produto.objects.get(id=pk)  # MongoEngine
+    except Produto.DoesNotExist:
+        raise Http404("Produto não encontrado")
+    
     produto.delete()
     return redirect('produtos_admin_list')
