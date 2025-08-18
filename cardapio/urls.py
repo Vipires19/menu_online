@@ -22,6 +22,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', mongo_admin.site.urls),
+    path('login/', include('django.contrib.auth.urls')),
     path('', include('menu.urls')),
 ]
 
