@@ -184,3 +184,127 @@ class Pedido(Document):
     
     def __str__(self):
         return f"Pedido #{self.id} - {self.cliente_nome}"
+
+class PedidoReal(Document):
+    """
+    Modelo que corresponde à estrutura real dos pedidos no MongoDB
+    """
+    # ID do pedido personalizado
+    id_pedido = fields.StringField(max_length=50)
+    
+    # Informações do cliente (documento embutido)
+    cliente = fields.DictField()
+    
+    # Itens do pedido
+    itens = fields.ListField(fields.DictField())
+    
+    # Instruções para cozinha
+    instrucoes_cozinha = fields.DictField()
+    
+    # Valores
+    valor_total = fields.FloatField()
+    subtotal = fields.FloatField()
+    
+    # Status do pedido
+    status = fields.StringField()
+    
+    # Datas
+    data_criacao = fields.StringField()  # String ISO format
+    data_atualizacao = fields.StringField()  # String ISO format
+    
+    # Tipo de entrega
+    tipo_entrega = fields.StringField()  # "entrega" ou "retirada"
+    
+    # Endereço de entrega (quando aplicável)
+    endereco_entrega = fields.DictField()
+    
+    # Forma de pagamento
+    forma_pagamento = fields.StringField()
+    
+    # Valor da entrega
+    valor_entrega = fields.FloatField()
+    valor_total_final = fields.FloatField()
+    
+    # Histórico de status
+    historico_status = fields.ListField(fields.DictField())
+    
+    # Estrutura detalhada
+    estrutura_detalhada = fields.DictField()
+    
+    # Cobrança
+    cobranca_id = fields.StringField()
+    link_pagamento = fields.StringField()
+    
+    meta = {
+        'collection': 'pedidos',  # Usar a mesma coleção
+        'ordering': ['-data_criacao'],
+        'indexes': [
+            'status',
+            'data_criacao',
+            'id_pedido',
+            'cliente.telefone',
+        ]
+    }
+    
+    def __str__(self):
+        cliente_nome = self.cliente.get('nome', 'Cliente') if self.cliente else 'Cliente'
+        return f"Pedido #{self.id_pedido} - {cliente_nome}"
+    
+    @property
+    def cliente_nome(self):
+        """Propriedade para acessar o nome do cliente"""
+        return self.cliente.get('nome', '') if self.cliente else ''
+    
+    @property
+    def cliente_telefone(self):
+        """Propriedade para acessar o telefone do cliente"""
+        return self.cliente.get('telefone', '') if self.cliente else ''
+    
+    @property
+    def endereco_completo(self):
+        """Propriedade para acessar o endereço completo"""
+        if self.endereco_entrega and 'endereco' in self.endereco_entrega:
+            return self.endereco_entrega['endereco']
+        return None
+    
+    @property
+    def data_pedido_formatada(self):
+        """Converte string ISO para datetime para exibição"""
+        try:
+            from datetime import datetime
+            return datetime.fromisoformat(self.data_criacao.replace('Z', '+00:00'))
+        except:
+            return datetime.now()
+    
+    @property
+    def status_traduzido(self):
+        """Traduz o status para português"""
+        traducoes = {
+            'Aguardando definição de entrega': 'Aguardando Entrega',
+            'Aguardando forma de pagamento': 'Aguardando Pagamento',
+            'Aguardando pagamento': 'Aguardando Pagamento',
+            'Enviado para cozinha': 'Preparando',
+            'Em preparo': 'Preparando',
+            'Pronto': 'Pronto',
+            'Saiu para entrega': 'Saiu Entrega',
+            'Entregue': 'Entregue',
+            'Cancelado': 'Cancelado'
+        }
+        return traducoes.get(self.status, self.status)
+    
+    @property
+    def status_cor(self):
+        """Retorna a classe CSS para a cor do status"""
+        status_lower = self.status.lower()
+        if 'cozinha' in status_lower or 'preparo' in status_lower:
+            return 'bg-info text-white'
+        elif 'aguardando' in status_lower:
+            return 'bg-warning text-dark'
+        elif 'saiu' in status_lower or 'entrega' in status_lower:
+            return 'bg-success text-white'
+        elif 'entregue' in status_lower or 'pronto' in status_lower:
+            return 'bg-primary text-white'
+        elif 'cancelado' in status_lower:
+            return 'bg-danger text-white'
+        else:
+            return 'bg-secondary text-white'

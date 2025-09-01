@@ -12,6 +12,11 @@ urlpatterns = [
     path('editar_cardapio/<str:pk>/editar/', admin_views.produto_admin_form, name='produto_admin_edit'),
     path('editar_cardapio/<str:pk>/deletar/', admin_views.produto_admin_delete, name='produto_admin_delete'),
 
+    # Gestão de Pedidos
+    path('pedidos/fila/', admin_views.pedidos_fila_preparo, name='pedidos_fila_preparo'),
+    path('pedidos/criar-manual/', admin_views.criar_pedido_manual, name='criar_pedido_manual'),
+    path('pedidos/<str:pedido_id>/atualizar-status/', admin_views.atualizar_status_pedido, name='atualizar_status_pedido'),
+
     #path('adicionais/', admin_views.adicionais_admin_list, name='adicionais_admin_list'),
     #path('adicionais/novo/', admin_views.adicional_admin_form, name='adicional_admin_create'),
     #path('adicionais/<str:pk>/editar/', admin_views.adicional_admin_form, name='adicional_admin_edit'),
