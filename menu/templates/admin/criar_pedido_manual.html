@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Criar Pedido Manual - Admin{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<!-- Top bar com título e logout -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-plus-circle me-2"></i>Criar Pedido Manual</h1>
+    <div>
+        <a href="{% url 'pedidos_fila_preparo' %}" class="btn btn-outline-primary me-2">
+            <i class="fas fa-clipboard-list me-1"></i>Fila de Pedidos
+        </a>
+        <form action="{% url 'logout' %}" method="post" style="margin:0; display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-custom">
+                <i class="fas fa-sign-out-alt me-1"></i>Logout
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Formulário de criação de pedido -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Novo Pedido</h5>
+    </div>
+    <div class="card-body">
+        <form id="formPedido" method="post">
+            {% csrf_token %}
+            
+            <!-- Dados do Cliente -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6><i class="fas fa-user me-2"></i>Dados do Cliente</h6>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Nome do Cliente *</label>
+                    <input type="text" name="cliente_nome" class="form-control" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Telefone</label>
+                    <input type="text" name="cliente_telefone" class="form-control" placeholder="(11) 99999-9999">
+                </div>
+            </div>
+
+            <!-- Tipo de Entrega -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6><i class="fas fa-truck me-2"></i>Tipo de Entrega</h6>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tipo_entrega" value="retirada" id="retirada" checked>
+                        <label class="form-check-label" for="retirada">
+                            <i class="fas fa-store me-1"></i>Retirada no Local
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tipo_entrega" value="entrega" id="entrega">
+                        <label class="form-check-label" for="entrega">
+                            <i class="fas fa-motorcycle me-1"></i>Entrega
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Endereço (aparece apenas se entrega) -->
+            <div id="enderecoSection" class="row mb-4" style="display: none;">
+                <div class="col-12">
+                    <h6><i class="fas fa-map-marker-alt me-2"></i>Endereço de Entrega</h6>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Endereço</label>
+                    <input type="text" name="endereco" class="form-control" placeholder="Rua, número, bairro">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Distância (km)</label>
+                    <input type="number" name="distancia_km" class="form-control" step="0.1" min="0">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Tempo Estimado</label>
+                    <input type="text" name="tempo_estimado" class="form-control" placeholder="15 minutos">
+                </div>
+            </div>
+
+            <!-- Itens do Pedido -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6><i class="fas fa-utensils me-2"></i>Itens do Pedido</h6>
+                    <div id="itensContainer">
+                        <div class="item-row row mb-2">
+                            <div class="col-md-4">
+                                <select name="produto[]" class="form-select produto-select" required>
+                                    <option value="">Selecione o produto</option>
+                                    {% for produto in produtos %}
+                                    <option value="{{ produto.nome }}" data-preco="{{ produto.preco }}">{{ produto.nome }} - R$ {{ produto.preco }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" name="quantidade[]" class="form-control quantidade-input" placeholder="Qtd" min="1" value="1" required>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" name="valor[]" class="form-control valor-input" placeholder="R$" step="0.01" min="0" required>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" name="observacoes[]" class="form-control" placeholder="Observações">
+                            </div>
+                            <div class="col-md-1">
+                                <button type="button" class="btn btn-outline-danger btn-sm remover-item">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline-success btn-sm" id="adicionarItem">
+                        <i class="fas fa-plus me-1"></i>Adicionar Item
+                    </button>
+                </div>
+            </div>
+
+            <!-- Valores -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6><i class="fas fa-calculator me-2"></i>Valores</h6>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Subtotal</label>
+                    <input type="text" id="subtotal" class="form-control" readonly>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Taxa de Entrega</label>
+                    <input type="number" name="valor_entrega" id="valor_entrega" class="form-control" step="0.01" min="0" value="0">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Total Final</label>
+                    <input type="text" id="total_final" class="form-control" readonly>
+                </div>
+            </div>
+
+            <!-- Forma de Pagamento -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6><i class="fas fa-credit-card me-2"></i>Forma de Pagamento</h6>
+                </div>
+                <div class="col-md-6">
+                    <select name="forma_pagamento" class="form-select" required>
+                        <option value="dinheiro">Dinheiro</option>
+                        <option value="pix">PIX</option>
+                        <option value="cartao_credito">Cartão de Crédito</option>
+                        <option value="cartao_debito">Cartão de Débito</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Observações Gerais -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6><i class="fas fa-sticky-note me-2"></i>Observações Gerais</h6>
+                    <textarea name="observacoes_gerais" class="form-control" rows="3" placeholder="Observações para a cozinha..."></textarea>
+                </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="row">
+                <div class="col-12 text-end">
+                    <button type="button" class="btn btn-secondary me-2" onclick="history.back()">
+                        <i class="fas fa-times me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-1"></i>Criar Pedido
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast para notificações -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="pedidoToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto">Criação de Pedido</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toastMessage">
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Controle do tipo de entrega
+    const tipoEntregaRadios = document.querySelectorAll('input[name="tipo_entrega"]');
+    const enderecoSection = document.getElementById('enderecoSection');
+    
+    tipoEntregaRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'entrega') {
+                enderecoSection.style.display = 'block';
+            } else {
+                enderecoSection.style.display = 'none';
+            }
+        });
+    });
+
+    // Adicionar item
+    const adicionarItemBtn = document.getElementById('adicionarItem');
+    const itensContainer = document.getElementById('itensContainer');
+    
+    adicionarItemBtn.addEventListener('click', function() {
+        const novoItem = itensContainer.querySelector('.item-row').cloneNode(true);
+        novoItem.querySelector('.produto-select').value = '';
+        novoItem.querySelector('.quantidade-input').value = '1';
+        novoItem.querySelector('.valor-input').value = '';
+        novoItem.querySelector('input[name="observacoes[]"]').value = '';
+        itensContainer.appendChild(novoItem);
+        atualizarEventos();
+    });
+
+    // Remover item
+    function atualizarEventos() {
+        document.querySelectorAll('.remover-item').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (itensContainer.querySelectorAll('.item-row').length > 1) {
+                    this.closest('.item-row').remove();
+                    calcularTotal();
+                }
+            });
+        });
+
+        // Eventos para produtos e valores
+        document.querySelectorAll('.produto-select').forEach(select => {
+            select.addEventListener('change', function() {
+                const option = this.options[this.selectedIndex];
+                const preco = option.dataset.preco;
+                if (preco) {
+                    this.closest('.item-row').querySelector('.valor-input').value = preco;
+                    calcularTotal();
+                }
+            });
+        });
+
+        document.querySelectorAll('.quantidade-input, .valor-input').forEach(input => {
+            input.addEventListener('input', calcularTotal);
+        });
+    }
+
+    // Calcular total
+    function calcularTotal() {
+        let subtotal = 0;
+        document.querySelectorAll('.item-row').forEach(row => {
+            const quantidade = parseFloat(row.querySelector('.quantidade-input').value) || 0;
+            const valor = parseFloat(row.querySelector('.valor-input').value) || 0;
+            subtotal += quantidade * valor;
+        });
+        
+        const taxaEntrega = parseFloat(document.getElementById('valor_entrega').value) || 0;
+        const totalFinal = subtotal + taxaEntrega;
+        
+        document.getElementById('subtotal').value = `R$ ${subtotal.toFixed(2)}`;
+        document.getElementById('total_final').value = `R$ ${totalFinal.toFixed(2)}`;
+    }
+
+    // Evento para taxa de entrega
+    document.getElementById('valor_entrega').addEventListener('input', calcularTotal);
+
+    // Submissão do formulário
+    document.getElementById('formPedido').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('{% url "criar_pedido_manual" %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('toastMessage').textContent = data.message;
+                const toast = new bootstrap.Toast(document.getElementById('pedidoToast'));
+                toast.show();
+                
+                // Redirecionar para a fila após 2 segundos
+                setTimeout(() => {
+                    window.location.href = '{% url "pedidos_fila_preparo" %}';
+                }, 2000);
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao criar pedido');
+        });
+    });
+
+    // Inicializar eventos
+    atualizarEventos();
+    calcularTotal();
+});
+</script>
+{% endblock %}

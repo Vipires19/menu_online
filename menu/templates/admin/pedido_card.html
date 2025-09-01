@@ -1,0 +1,153 @@
+<div class="card h-100 pedido-card" data-pedido-id="{{ pedido.id }}">
+    <!-- Header do card com status colorido -->
+    <div class="card-header d-flex justify-content-between align-items-center {{ pedido.status_cor }}">
+        <h6 class="mb-0">
+            <i class="fas fa-hashtag me-1"></i>{{ pedido.id_pedido }}
+        </h6>
+        <span class="badge bg-light text-dark">
+            {{ pedido.data_pedido_formatada|date:"H:i" }}
+        </span>
+    </div>
+    
+    <div class="card-body">
+        <!-- Informações do cliente -->
+        <div class="mb-3">
+            <h6 class="card-title">
+                <i class="fas fa-user me-1"></i>{{ pedido.cliente_nome }}
+            </h6>
+            {% if pedido.cliente_telefone %}
+            <p class="text-muted mb-1">
+                <i class="fas fa-phone me-1"></i>{{ pedido.cliente_telefone }}
+            </p>
+            {% endif %}
+            <span class="badge {{ pedido.status_cor }} mb-2">{{ pedido.status_traduzido }}</span>
+        </div>
+
+        <!-- Itens do pedido -->
+        <div class="mb-3">
+            <h6><i class="fas fa-utensils me-1"></i>Itens:</h6>
+            <ul class="list-unstyled">
+                {% for item in pedido.itens %}
+                <li class="mb-1">
+                    <strong>{{ item.quantidade }}x</strong> {{ item.produto }}
+                    <span class="text-success">R$ {{ item.valor_unitario }}</span>
+                    {% if item.adicionais %}
+                    <br><small class="text-muted">
+                        <i class="fas fa-plus me-1"></i>
+                        {% for adicional in item.adicionais %}{{ adicional.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </small>
+                    {% endif %}
+                    {% if item.observacoes %}
+                    <br><small class="text-info">
+                        <i class="fas fa-comment me-1"></i>{{ item.observacoes }}
+                    </small>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Informações de entrega -->
+        {% if pedido.tipo_entrega == 'entrega' and pedido.endereco_completo %}
+        <div class="mb-3">
+            <h6><i class="fas fa-map-marker-alt me-1"></i>Entrega:</h6>
+            <p class="text-muted small mb-0">
+                {{ pedido.endereco_completo }}
+                {% if pedido.endereco_entrega.distancia_km %}
+                <br><i class="fas fa-route me-1"></i>{{ pedido.endereco_entrega.distancia_km }} km
+                {% endif %}
+                {% if pedido.endereco_entrega.tempo_estimado %}
+                - {{ pedido.endereco_entrega.tempo_estimado }}
+                {% endif %}
+            </p>
+        </div>
+        {% elif pedido.tipo_entrega == 'retirada' %}
+        <div class="mb-3">
+            <h6><i class="fas fa-store me-1"></i>Retirada no Local</h6>
+        </div>
+        {% endif %}
+
+        <!-- Instruções da cozinha -->
+        {% if pedido.instrucoes_cozinha.observacoes %}
+        <div class="mb-3">
+            <h6><i class="fas fa-sticky-note me-1"></i>Observações:</h6>
+            <p class="text-muted small mb-0">{{ pedido.instrucoes_cozinha.observacoes }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Forma de pagamento -->
+        {% if pedido.forma_pagamento %}
+        <div class="mb-3">
+            <h6><i class="fas fa-credit-card me-1"></i>Pagamento:</h6>
+            <span class="badge bg-primary">{{ pedido.forma_pagamento|upper }}</span>
+        </div>
+        {% endif %}
+
+        <!-- Valores -->
+        <div class="mb-3">
+            <div class="d-flex justify-content-between">
+                <span>Subtotal:</span>
+                <span>R$ {{ pedido.valor_total|floatformat:2 }}</span>
+            </div>
+            {% if pedido.valor_entrega and pedido.valor_entrega > 0 %}
+            <div class="d-flex justify-content-between">
+                <span>Taxa de entrega:</span>
+                <span>R$ {{ pedido.valor_entrega|floatformat:2 }}</span>
+            </div>
+            {% endif %}
+            <hr>
+            <div class="d-flex justify-content-between">
+                <strong>Total:</strong>
+                <strong class="text-success">R$ {{ pedido.valor_total_final|floatformat:2 }}</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer com ações -->
+    <div class="card-footer">
+        <div class="d-grid gap-2">
+            <!-- Botões de ação baseados no status atual -->
+            {% if pedido.status == "Enviado para cozinha" %}
+                <button class="btn btn-primary atualizar-status" 
+                        data-status="Em preparo" data-pedido-id="{{ pedido.id }}">
+                    <i class="fas fa-fire me-1"></i>Em Preparo
+                </button>
+            {% elif pedido.status == "Em preparo" %}
+                <button class="btn btn-success atualizar-status" 
+                        data-status="Pronto" data-pedido-id="{{ pedido.id }}">
+                    <i class="fas fa-check-circle me-1"></i>Pronto
+                </button>
+            {% elif pedido.status == "Pronto" %}
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success atualizar-status" 
+                            data-status="Saiu para entrega" data-pedido-id="{{ pedido.id }}">
+                        <i class="fas fa-motorcycle me-1"></i>Saiu para Entrega
+                    </button>
+                    <button class="btn btn-warning atualizar-status" 
+                            data-status="Retirada" data-pedido-id="{{ pedido.id }}">
+                        <i class="fas fa-store me-1"></i>Retirada
+                    </button>
+                    <button class="btn btn-info atualizar-status" 
+                            data-status="Balcão" data-pedido-id="{{ pedido.id }}">
+                        <i class="fas fa-utensils me-1"></i>Balcão
+                    </button>
+                </div>
+            {% elif pedido.status == "Saiu para entrega" %}
+                <button class="btn btn-success atualizar-status" 
+                        data-status="Concluído" data-pedido-id="{{ pedido.id }}">
+                    <i class="fas fa-check me-1"></i>Concluído
+                </button>
+            {% elif pedido.status == "Retirada" %}
+                <button class="btn btn-success atualizar-status" 
+                        data-status="Concluído" data-pedido-id="{{ pedido.id }}">
+                    <i class="fas fa-check me-1"></i>Concluído
+                </button>
+            {% elif pedido.status == "Balcão" %}
+                <button class="btn btn-success atualizar-status" 
+                        data-status="Concluído" data-pedido-id="{{ pedido.id }}">
+                    <i class="fas fa-check me-1"></i>Concluído
+                </button>
+            {% endif %}
+        </div>
+    </div>
+</div>

@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Fila de Pedidos - Admin{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<!-- Top bar com título e logout -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-clipboard-list me-2"></i>Fila de Pedidos</h1>
+    <div>
+        <a href="{% url 'criar_pedido_manual' %}" class="btn btn-success me-2">
+            <i class="fas fa-plus me-1"></i>Novo Pedido
+        </a>
+        <a href="{% url 'produtos_admin_list' %}" class="btn btn-outline-primary me-2">
+            <i class="fas fa-utensils me-1"></i>Gerenciar Produtos
+        </a>
+        <form action="{% url 'logout' %}" method="post" style="margin:0; display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-custom">
+                <i class="fas fa-sign-out-alt me-1"></i>Logout
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Cards de estatísticas -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-list me-2"></i>Total</h5>
+                <h3>{{ stats.total_pedidos }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-utensils me-2"></i>Na Cozinha</h5>
+                <h3>{{ stats.enviado_cozinha }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-fire me-2"></i>Preparando</h5>
+                <h3>{{ stats.em_preparo }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-motorcycle me-2"></i>Saiu Entrega</h5>
+                <h3>{{ stats.saiu_entrega }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-store me-2"></i>Retirada</h5>
+                <h3>{{ stats.retirada }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-utensils me-2"></i>Balcão</h5>
+                <h3>{{ stats.balcao }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros de busca -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">Todos os status</option>
+                    {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if value == status_filter %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Cliente</label>
+                <input type="text" name="cliente" value="{{ cliente_search }}" placeholder="Nome do cliente" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Telefone</label>
+                <input type="text" name="telefone" value="{{ telefone_search }}" placeholder="Telefone" class="form-control">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="fas fa-search me-1"></i>Filtrar
+                </button>
+                <a href="{% url 'pedidos_fila_preparo' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-1"></i>Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Lista de pedidos organizados por status -->
+<div class="row">
+    <!-- Enviado para Cozinha -->
+    <div class="col-12 mb-4">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="fas fa-utensils me-2"></i>Enviado para Cozinha
+                    <span class="badge bg-dark ms-2">{{ pedidos_por_status.Enviado_para_cozinha|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for pedido in pedidos_por_status.Enviado_para_cozinha %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        {% include "admin/pedido_card.html" with pedido=pedido %}
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center py-3">
+                        <p class="text-muted mb-0">Nenhum pedido aguardando na cozinha</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Em Preparo -->
+    <div class="col-12 mb-4">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-fire me-2"></i>Em Preparo
+                    <span class="badge bg-light text-dark ms-2">{{ pedidos_por_status.Em_preparo|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for pedido in pedidos_por_status.Em_preparo %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        {% include "admin/pedido_card.html" with pedido=pedido %}
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center py-3">
+                        <p class="text-muted mb-0">Nenhum pedido em preparo</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pronto -->
+    <div class="col-12 mb-4">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-check-circle me-2"></i>Pronto
+                    <span class="badge bg-light text-dark ms-2">{{ pedidos_por_status.Pronto|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for pedido in pedidos_por_status.Pronto %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        {% include "admin/pedido_card.html" with pedido=pedido %}
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center py-3">
+                        <p class="text-muted mb-0">Nenhum pedido pronto</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Saiu para Entrega -->
+    <div class="col-12 mb-4">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-motorcycle me-2"></i>Saiu para Entrega
+                    <span class="badge bg-light text-dark ms-2">{{ pedidos_por_status.Saiu_para_entrega|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for pedido in pedidos_por_status.Saiu_para_entrega %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        {% include "admin/pedido_card.html" with pedido=pedido %}
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center py-3">
+                        <p class="text-muted mb-0">Nenhum pedido saiu para entrega</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retirada -->
+    <div class="col-12 mb-4">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="fas fa-store me-2"></i>Retirada
+                    <span class="badge bg-dark ms-2">{{ pedidos_por_status.Retirada|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for pedido in pedidos_por_status.Retirada %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        {% include "admin/pedido_card.html" with pedido=pedido %}
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center py-3">
+                        <p class="text-muted mb-0">Nenhum pedido para retirada</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Balcão -->
+    <div class="col-12 mb-4">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-utensils me-2"></i>Balcão
+                    <span class="badge bg-light text-dark ms-2">{{ pedidos_por_status.Balcao|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for pedido in pedidos_por_status.Balcao %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        {% include "admin/pedido_card.html" with pedido=pedido %}
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center py-3">
+                        <p class="text-muted mb-0">Nenhum pedido no balcão</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast para notificações -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="statusToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto">Atualização de Status</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toastMessage">
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+console.log('DEBUG: Script carregado!');
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DEBUG: DOM carregado!');
+    
+    // Função para atualizar status via AJAX
+    function atualizarStatus(pedidoId, novoStatus) {
+        console.log('DEBUG: Função atualizarStatus chamada');
+        console.log('DEBUG: Pedido ID:', pedidoId);
+        console.log('DEBUG: Novo Status:', novoStatus);
+        
+        const url = `/pedidos/${pedidoId}/atualizar-status/`;
+        console.log('DEBUG: URL:', url);
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: `status=${novoStatus}`
+        })
+        .then(response => {
+            console.log('DEBUG: Response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('DEBUG: Response data:', data);
+            if (data.success) {
+                // Mostrar toast de sucesso
+                document.getElementById('toastMessage').textContent = data.message;
+                const toast = new bootstrap.Toast(document.getElementById('statusToast'));
+                toast.show();
+                
+                // Recarregar apenas a página para atualizar as categorias
+                setTimeout(() => {
+                    console.log('DEBUG: Recarregando página...');
+                    window.location.reload();
+                }, 1000);
+            } else {
+                console.error('DEBUG: Erro na resposta:', data.message);
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('DEBUG: Erro na requisição:', error);
+            alert('Erro ao atualizar status');
+        });
+    }
+
+    // Event listeners para os botões de atualizar status
+    const botoes = document.querySelectorAll('.atualizar-status');
+    console.log('DEBUG: Encontrados', botoes.length, 'botões de atualizar status');
+    
+    botoes.forEach((button, index) => {
+        console.log(`DEBUG: Botão ${index}:`, button);
+        console.log(`DEBUG: Botão ${index} data-pedido-id:`, button.dataset.pedidoId);
+        console.log(`DEBUG: Botão ${index} data-status:`, button.dataset.status);
+        
+        button.addEventListener('click', function(e) {
+            console.log('DEBUG: Botão clicado!');
+            e.preventDefault();
+            const pedidoId = this.dataset.pedidoId;
+            const novoStatus = this.dataset.status;
+            console.log('DEBUG: Pedido ID:', pedidoId, 'Novo Status:', novoStatus);
+            
+            if (confirm(`Confirmar mudança de status para "${this.textContent.trim()}"?`)) {
+                console.log('DEBUG: Confirmado, chamando atualizarStatus...');
+                atualizarStatus(pedidoId, novoStatus);
+            } else {
+                console.log('DEBUG: Cancelado pelo usuário');
+            }
+        });
+    });
+});
+
+// Fallback se DOMContentLoaded não funcionar
+setTimeout(() => {
+    console.log('DEBUG: Fallback - verificando se DOM está pronto');
+    if (document.readyState === 'complete') {
+        console.log('DEBUG: DOM já estava pronto, executando código...');
+        // Executar o código aqui também
+    }
+}, 1000);
+</script>
+{% endblock %}
