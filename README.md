@@ -12,6 +12,12 @@ mesmo sem acesso ao admin do Django, já que a integração com o MongoDB impede
 - Upload de imagens para os produtos.
 - Visualizar detalhes de cada produto.
 - Organização dos itens por categorias.
+- Integração com WhatsApp via Agent de IA:
+ - Anotar pedidos diretamente no WhatsApp.
+ - Calcular automaticamente o valor da entrega a partir do endereço ou localização enviada pelo cliente.
+ - Gerar links de pagamento de forma automática.
+ - Notificar a confirmação do pagamento.
+ - Suporte para pedidos alternativos (ex.: retirada no balcão, reservas, etc.).
 
 ---
 
@@ -21,6 +27,12 @@ mesmo sem acesso ao admin do Django, já que a integração com o MongoDB impede
 - **MongoDB** (com `djongo` ou `pymongo`, conforme configuração)
 - **Bootstrap** (para o layout responsivo)
 - **HTML5 / CSS3 / JavaScript**
+- **WAHA API**
+- **LANGGRAPH**
+- **Google MAPS API**
+- **OPENAI API**
+- **ASAAS BANK API**
+- **FLASK**
 
 ---
 
@@ -55,8 +67,8 @@ urlpatterns = [
 
 1. **Clonar o repositório**
 ```bash
-git clone https://github.com/seuusuario/seurepositorio.git
-cd seurepositorio
+git clone https://github.com/Vipires19/menu_online.git
+cd menu_online
 ```
 
 2. **Criar e ativar um ambiente virtual**
@@ -89,6 +101,48 @@ python manage.py runserver
 http://127.0.0.1:8000/
 ```
 
+---
+## 📱 Integração com WhatsApp
+
+1. **Clone o repositório**
+   ```bash
+   git clone https://github.com/Vipires19/menu_online.git
+   cd menu_online
+
+2. **Crie e ative um ambiente virtual**
+  ```bash
+  python -m venv venv
+  source venv/bin/activate  # Linux/Mac
+  venv\Scripts\activate     # Windows
+  ```
+
+3. **Instale as dependências**
+  ``` bash
+  pip install -r requirements.txt
+  ```
+
+4. **Configure as variáveis de ambiente (.env)**
+  ``` bash
+  OPENAI_API_KEY= "SUA KEY DA OPENAI"
+  MONGO_USER = "SEU USUÁRIO MONGODB"
+  MONGO_PASS = "SUA SENHA MONGODB"
+  ASSAS_ACCESS_TOKEN = "SUA KEY DO ASSAS"
+  NGROK_AUTHTOKEN= "EM AMBIENTE DE DESENVOLVIMENTO UTILIZEI O NGROK PARA GERAR UM DOMÍNIO HTTPS PARA O WEBHOOK DO ASSAS ENTÃO É NECESSÁRIO O AUTHTOKEN DO NGROK"
+  ```
+
+5. **Execute o agente**
+
+ Eu utilizo dois terminais:
+  - Um com o comando:
+     ``` bash
+     docker-compose up --build waha
+     ```
+  - Outo com o comando:
+     ``` bash
+     docker-compose up --build api
+     ```
+
+Em minha humilde opinião torna mais fácil o DEBUG
 ---
 
 ## 📷 Exemplo de Tela
