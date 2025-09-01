@@ -12,6 +12,10 @@ mesmo sem acesso ao admin do Django, já que a integração com o MongoDB impede
 - Upload de imagens para os produtos.
 - Visualizar detalhes de cada produto.
 - Organização dos itens por categorias.
+- Controle dos pedidos:
+ - Exibe pedidos realizado pelo Agent no whatsapp salvos no MongoDB
+ - Alteração de status (Pedidos em preparo, pedidos prontos, pedidos que saíram para entrega, retirada ou balcão, pedidos concluídos)
+ - Criação manual de pedidos
 - Integração com WhatsApp via Agent de IA:
  - Anotar pedidos diretamente no WhatsApp.
  - Calcular automaticamente o valor da entrega a partir do endereço ou localização enviada pelo cliente.
