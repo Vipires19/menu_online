@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Dashboard - Restaurante</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Estilos customizados -->
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --dark-color: #343a40;
+            --light-color: #f8f9fa;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .dashboard-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            border: none;
+            height: 100%;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+        }
+        
+        .metric-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+        }
+        
+        .chart-title i {
+            margin-right: 0.5rem;
+            color: var(--primary-color);
+        }
+        
+        .filter-section {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .btn-filter {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 0.5rem 1.5rem;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-filter:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            color: white;
+        }
+        
+        .btn-filter.active {
+            background: var(--success-color);
+        }
+        
+        .btn-outline-primary, .btn-outline-success {
+            border-radius: 25px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-outline-primary:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+        
+        .btn-outline-success:hover {
+            background: var(--success-color);
+            border-color: var(--success-color);
+            transform: translateY(-2px);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .chart-container canvas {
+            max-height: 250px !important;
+        }
+        
+        .progress-ring {
+            width: 80px;
+            height: 80px;
+        }
+        
+        .progress-ring-circle {
+            stroke: var(--primary-color);
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.35s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .table-modern {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .table-modern th {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            border: none;
+            padding: 1rem;
+        }
+        
+        .table-modern td {
+            padding: 1rem;
+            border-color: #f1f3f4;
+        }
+        
+        .table-modern tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .floating-action {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 1000;
+        }
+        
+        .btn-floating {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--success-color) 0%, #20c997 100%);
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-floating:hover {
+            transform: scale(1.1);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.3);
+            color: white;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .metric-value {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header do Dashboard -->
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-0">
+                        <i class="fas fa-chart-line me-3"></i>
+                        Dashboard do Restaurante
+                    </h1>
+                    <p class="mb-0 mt-2">Visão completa da operação e performance</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="d-flex justify-content-end align-items-center gap-2">
+                        <span class="me-3">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            {% if periodo_atual == "hoje" %}
+                                Hoje
+                            {% elif periodo_atual == "mes" %}
+                                Este Mês
+                            {% else %}
+                                Geral
+                            {% endif %}
+                        </span>
+                        <a href="{% url 'lista_produtos' %}" class="btn btn-light">
+                            <i class="fas fa-book me-2"></i>
+                            Cardápio
+                        </a>
+                        <a href="{% url 'pedidos_fila_preparo' %}" class="btn btn-light">
+                            <i class="fas fa-utensils me-2"></i>
+                            Fila de Pedidos
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Filtros de Período -->
+        <div class="filter-section">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h5 class="mb-3">
+                        <i class="fas fa-filter me-2"></i>
+                        Filtros de Período
+                    </h5>
+                    <div class="btn-group" role="group">
+                        <a href="?periodo=hoje" class="btn btn-filter {% if periodo_atual == 'hoje' %}active{% endif %}">
+                            <i class="fas fa-calendar-day me-2"></i>
+                            Hoje
+                        </a>
+                        <a href="?periodo=mes" class="btn btn-filter {% if periodo_atual == 'mes' %}active{% endif %}">
+                            <i class="fas fa-calendar-week me-2"></i>
+                            Este Mês
+                        </a>
+                        <a href="?periodo=geral" class="btn btn-filter {% if periodo_atual == 'geral' %}active{% endif %}">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            Geral
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h5 class="mb-3">
+                        <i class="fas fa-tools me-2"></i>
+                        Ações Rápidas
+                    </h5>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{% url 'lista_produtos' %}" class="btn btn-outline-primary">
+                            <i class="fas fa-book me-2"></i>
+                            Ver Cardápio
+                        </a>
+                        <a href="{% url 'pedidos_fila_preparo' %}" class="btn btn-outline-success">
+                            <i class="fas fa-utensils me-2"></i>
+                            Fila de Pedidos
+                        </a>
+                        <input type="date" class="form-control" id="data_inicio" placeholder="Data Início" style="max-width: 150px;">
+                        <input type="date" class="form-control" id="data_fim" placeholder="Data Fim" style="max-width: 150px;">
+                        <button class="btn btn-filter" onclick="aplicarFiltroData()">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Métricas Principais -->
+        <div class="stats-grid">
+            <div class="metric-card">
+                <div class="metric-icon" style="background: linear-gradient(135deg, var(--success-color) 0%, #20c997 100%);">
+                    <i class="fas fa-shopping-cart"></i>
+                </div>
+                <div class="metric-value text-success">{{ total_pedidos }}</div>
+                <div class="metric-label">Total de Pedidos</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon" style="background: linear-gradient(135deg, var(--info-color) 0%, #6f42c1 100%);">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="metric-value text-info">{{ pedidos_concluidos }}</div>
+                <div class="metric-label">Pedidos Concluídos</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon" style="background: linear-gradient(135deg, var(--danger-color) 0%, #e74c3c 100%);">
+                    <i class="fas fa-times-circle"></i>
+                </div>
+                <div class="metric-value text-danger">{{ pedidos_cancelados }}</div>
+                <div class="metric-label">Pedidos Cancelados</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon" style="background: linear-gradient(135deg, var(--warning-color) 0%, #fd7e14 100%);">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="metric-value text-warning">{{ pedidos_em_andamento }}</div>
+                <div class="metric-label">Em Andamento</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                    <i class="fas fa-dollar-sign"></i>
+                </div>
+                <div class="metric-value text-success">R$ {{ valor_total_arrecadado|floatformat:2 }}</div>
+                <div class="metric-label">Valor Arrecadado</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="metric-value text-primary">R$ {{ valor_medio_pedido|floatformat:2 }}</div>
+                <div class="metric-label">Ticket Médio</div>
+            </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="charts-grid">
+            <!-- Gráfico de Pedidos por Status -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-pie-chart"></i>
+                    Distribuição por Status
+                </div>
+                <canvas id="statusChart" height="300"></canvas>
+            </div>
+            
+            <!-- Gráfico de Pedidos por Hora/Dia -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-chart-bar"></i>
+                    {% if periodo_atual == 'hoje' %}
+                        Pedidos por Hora
+                    {% else %}
+                        Pedidos por Dia
+                    {% endif %}
+                </div>
+                <canvas id="timelineChart" height="300"></canvas>
+            </div>
+            
+            <!-- Gráfico de Produtos por Categoria -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-tags"></i>
+                    Produtos por Categoria
+                </div>
+                <canvas id="categoriasChart" height="300"></canvas>
+            </div>
+            
+            <!-- Gráfico de Formas de Pagamento -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-credit-card"></i>
+                    Formas de Pagamento
+                </div>
+                <canvas id="pagamentoChart" height="300"></canvas>
+            </div>
+        </div>
+
+        <!-- Tabelas de Dados -->
+        <div class="row">
+            <!-- Produtos Mais Vendidos -->
+            <div class="col-md-6">
+                <div class="table-modern">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th><i class="fas fa-trophy me-2"></i>Produtos Mais Vendidos</th>
+                                <th>Quantidade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for produto, quantidade in produtos_mais_vendidos %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3">
+                                            <span class="badge bg-primary rounded-pill">{{ forloop.counter }}</span>
+                                        </div>
+                                        {{ produto }}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ quantidade }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-muted">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Nenhum produto vendido no período
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Resumo de Performance -->
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-tachometer-alt"></i>
+                        Indicadores de Performance
+                    </div>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <div class="progress-ring mx-auto mb-2">
+                                    <svg class="progress-ring" width="80" height="80">
+                                        <circle class="progress-ring-circle" stroke="#e0e0e0" stroke-width="8" fill="transparent" r="32" cx="40" cy="40"/>
+                                        <circle class="progress-ring-circle" stroke="#28a745" stroke-width="8" fill="transparent" r="32" cx="40" cy="40" 
+                                                stroke-dasharray="{{ taxa_conversao|floatformat:0 }} {{ taxa_conversao_restante|floatformat:0 }}" 
+                                                stroke-dashoffset="0"/>
+                                    </svg>
+                                </div>
+                                <div class="fw-bold text-success">{{ taxa_conversao|floatformat:1 }}%</div>
+                                <small class="text-muted">Taxa de Conversão</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <div class="progress-ring mx-auto mb-2">
+                                    <svg class="progress-ring" width="80" height="80">
+                                        <circle class="progress-ring-circle" stroke="#e0e0e0" stroke-width="8" fill="transparent" r="32" cx="40" cy="40"/>
+                                        <circle class="progress-ring-circle" stroke="#17a2b8" stroke-width="8" fill="transparent" r="32" cx="40" cy="40" 
+                                                stroke-dasharray="{{ tempo_medio_preparo }} {{ tempo_medio_restante }}" 
+                                                stroke-dashoffset="0"/>
+                                    </svg>
+                                </div>
+                                <div class="fw-bold text-info">{{ tempo_medio_preparo }} min</div>
+                                <small class="text-muted">Tempo Médio</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rodapé -->
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+        <div class="container">
+            <p class="mb-0">&copy; 2024 Restaurante. Todos os direitos reservados.</p>
+        </div>
+    </footer>
+
+    <!-- Botão Flutuante -->
+    <div class="floating-action">
+        <button class="btn btn-floating" onclick="window.location.reload()" title="Atualizar Dashboard">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Scripts do Dashboard -->
+    <script>
+        // Dados dos gráficos
+        const statusData = {{ status_data|safe }};
+        const timelineData = {% if periodo_atual == 'hoje' %}{{ pedidos_por_hora|safe }}{% else %}{{ pedidos_por_dia|safe }}{% endif %};
+        const categoriasData = {{ categorias_data|safe }};
+        const pagamentoData = {{ pagamento_data|safe }};
+        
+        // Cores para os gráficos
+        const colors = [
+            '#667eea', '#764ba2', '#f093fb', '#f5576c',
+            '#4facfe', '#00f2fe', '#43e97b', '#38f9d7',
+            '#ffecd2', '#fcb69f', '#a8edea', '#fed6e3'
+        ];
+        
+        // Gráfico de Status (Pizza)
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: statusData.map(item => item[0]),
+                datasets: [{
+                    data: statusData.map(item => item[1]),
+                    backgroundColor: colors.slice(0, statusData.length),
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 10,
+                            usePointStyle: true,
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de Timeline (Linha)
+        const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+        new Chart(timelineCtx, {
+            type: 'line',
+            data: {
+                labels: Object.keys(timelineData),
+                datasets: [{
+                    label: 'Pedidos',
+                    data: Object.values(timelineData),
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#667eea',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de Categorias (Barra)
+        const categoriasCtx = document.getElementById('categoriasChart').getContext('2d');
+        new Chart(categoriasCtx, {
+            type: 'bar',
+            data: {
+                labels: categoriasData.map(item => item[0]),
+                datasets: [{
+                    label: 'Produtos',
+                    data: categoriasData.map(item => item[1]),
+                    backgroundColor: colors.slice(0, categoriasData.length),
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de Pagamento (Pizza)
+        const pagamentoCtx = document.getElementById('pagamentoChart').getContext('2d');
+        new Chart(pagamentoCtx, {
+            type: 'pie',
+            data: {
+                labels: pagamentoData.map(item => item[0]),
+                datasets: [{
+                    data: pagamentoData.map(item => item[1]),
+                    backgroundColor: colors.slice(0, pagamentoData.length),
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 10,
+                            usePointStyle: true,
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Função para aplicar filtro de data
+        function aplicarFiltroData() {
+            const dataInicio = document.getElementById('data_inicio').value;
+            const dataFim = document.getElementById('data_fim').value;
+            
+            if (dataInicio && dataFim) {
+                window.location.href = `?data_inicio=${dataInicio}&data_fim=${dataFim}`;
+            } else {
+                alert('Por favor, selecione ambas as datas.');
+            }
+        }
+        
+        // Animação dos números
+        function animateValue(element, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const current = Math.floor(progress * (end - start) + start);
+                element.textContent = current;
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+        
+        // Animar métricas ao carregar
+        document.addEventListener('DOMContentLoaded', function() {
+            const metricValues = document.querySelectorAll('.metric-value');
+            metricValues.forEach(element => {
+                const text = element.textContent;
+                const number = parseFloat(text.replace(/[^\d.-]/g, ''));
+                if (!isNaN(number)) {
+                    element.textContent = '0';
+                    animateValue(element, 0, number, 2000);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
