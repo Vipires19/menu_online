@@ -1,4 +1,4 @@
-# Cardápio Online com Django + MongoDB
+# Sistema CRM para restaurantes com Django + MongoDB + Atendente IA
 
 Este é um projeto de **Cardápio Online** desenvolvido em **Django** com integração ao **MongoDB**.  
 O objetivo é permitir que restaurantes, lanchonetes ou similares possam gerenciar seu cardápio de forma simples e prática,  
