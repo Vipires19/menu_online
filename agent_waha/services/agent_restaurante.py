@@ -421,7 +421,7 @@ def processar_pedido_full(text: str,
                           nome_cliente: str = None,
                           telefone: str = None,
                           auto_accept_threshold: int = 80,
-                          fuzzy_prod_threshold: int = 60,
+                          fuzzy_prod_threshold: int = 80,
                           state: dict = None) -> dict:
     """
     Tool para processar pedidos complexos com múltiplos itens, adicionais específicos e observações.
@@ -485,8 +485,8 @@ def processar_pedido_full(text: str,
         s = re.sub(r'[^\w\s]', '', s)
         return s.strip()
 
-    def _achar_produto_fuzzy(nome_busca: str, min_score: int = fuzzy_prod_threshold):
-        """Busca produto usando fuzzy matching"""
+    def _achar_produto_fuzzy(nome_busca: str, min_score: int = 80):
+        """Busca produto usando fuzzy matching com threshold mais restritivo"""
         if not nome_busca:
             return None, None
         produtos_cursor = list(coll5.find({"disponivel": True}))
@@ -524,6 +524,36 @@ def processar_pedido_full(text: str,
         sug_raw = process.extract(query, nomes_norm, scorer=fuzz.ratio, limit=limit)
         suggestions = [nomes_db[i] for _, _, i in sug_raw]
         return best_name, int(score), suggestions
+
+    def _buscar_produtos_similares(nome_busca: str, limit=5):
+        """Busca produtos similares para sugestão quando produto não é encontrado"""
+        if not nome_busca:
+            return []
+        
+        produtos_cursor = list(coll5.find({"disponivel": True}))
+        if not produtos_cursor:
+            return []
+        
+        # Cria lista de produtos com nomes normalizados
+        produtos_com_scores = []
+        query_norm = normalizar(nome_busca)
+        
+        for produto in produtos_cursor:
+            nome_produto = produto.get("nome", "")
+            nome_norm = normalizar(nome_produto)
+            score = fuzz.ratio(query_norm, nome_norm)
+            
+            # Só inclui produtos com score mínimo de 40
+            if score >= 40:
+                produtos_com_scores.append({
+                    "nome": nome_produto,
+                    "score": score,
+                    "produto": produto
+                })
+        
+        # Ordena por score (maior primeiro) e retorna os melhores
+        produtos_com_scores.sort(key=lambda x: x["score"], reverse=True)
+        return produtos_com_scores[:limit]
 
     def _parse_items_from_text(text_in: str):
         """
@@ -717,12 +747,49 @@ def processar_pedido_full(text: str,
             produto_doc, score = _achar_produto_fuzzy(nome_produto)
             
             if not produto_doc:
-                return {
-                    "success": False, 
-                    "message": f"Produto '{nome_produto}' não encontrado no cardápio. Pode verificar o nome?"
-                }
+                # Busca produtos similares para sugerir
+                produtos_similares = _buscar_produtos_similares(nome_produto)
+                if produtos_similares:
+                    sugestoes = [p["nome"] for p in produtos_similares[:3]]
+                    return {
+                        "success": False, 
+                        "need_confirmation": True,
+                        "message": f"❌ Produto '{nome_produto}' não encontrado no cardápio.\n\n🤔 Você quis dizer um destes?\n" + 
+                                 "\n".join([f"• {sug}" for sug in sugestoes]) + 
+                                 f"\n\nPor favor, confirme qual produto você deseja! 😊"
+                    }
+                else:
+                    return {
+                        "success": False, 
+                        "message": f"❌ Produto '{nome_produto}' não encontrado no cardápio. Pode verificar o nome?"
+                    }
             
             print(f"[v1] Produto encontrado: {produto_doc.get('nome')} (score: {score})")
+            
+            # Se o score for baixo (menos de 80), pede confirmação
+            if score < 80:
+                # Busca produtos similares para mostrar alternativas
+                produtos_similares = _buscar_produtos_similares(nome_produto)
+                sugestoes = [p["nome"] for p in produtos_similares[:3] if p["nome"] != produto_doc.get("nome")]
+                
+                mensagem_confirmacao = f"🤔 Você pediu '{nome_produto}' mas encontrei '{produto_doc.get('nome')}' (similaridade: {score}%)\n\n"
+                
+                if sugestoes:
+                    mensagem_confirmacao += f"Outras opções disponíveis:\n" + "\n".join([f"• {sug}" for sug in sugestoes]) + "\n\n"
+                
+                mensagem_confirmacao += f"✅ Confirma que quer o '{produto_doc.get('nome')}' ou prefere outro?"
+                
+                return {
+                    "success": False,
+                    "need_confirmation": True,
+                    "message": mensagem_confirmacao,
+                    "produto_sugerido": {
+                        "nome_original": nome_produto,
+                        "nome_sugerido": produto_doc.get('nome'),
+                        "score": score,
+                        "alternativas": sugestoes
+                    }
+                }
             
             # Valida adicionais
             adicionais_db = produto_doc.get("adicionais", [])
