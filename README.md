@@ -3,7 +3,7 @@
 Este é um projeto de **Sistema CRM** completo desenvolvido em **Django** com integração ao **MongoDB**, **OPEN AI**, **WAHA**.  
 O objetivo é permitir que restaurantes, lanchonetes ou similares possam gerenciar sua operação de forma simples e prática,  
 mesmo sem acesso ao admin do Django, já que a integração com o MongoDB impede o uso direto da interface administrativa padrão.
-O CRM ainda conta com um atendente IA para o whatsapp que faz o atendimento dos clientes e anota os pedidos.
+O CRM ainda conta com um atendente IA para o whatsapp que faz o atendimento dos clientes, anota os pedidos e faz cobranças no pix e cartão.
 
 ---
 
