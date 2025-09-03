@@ -12,6 +12,8 @@ mesmo sem acesso ao admin do Django, já que a integração com o MongoDB impede
 - Upload de imagens para os produtos.
 - Visualizar detalhes de cada produto.
 - Organização dos itens por categorias.
+- Dashboard gerencial:
+ - Controle da operação do restaurante
 - Controle dos pedidos:
  - Exibe pedidos realizado pelo Agent no whatsapp salvos no MongoDB
  - Alteração de status (Pedidos em preparo, pedidos prontos, pedidos que saíram para entrega, retirada ou balcão, pedidos concluídos)
