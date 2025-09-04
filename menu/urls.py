@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import admin_views
+from . import webhook_views
 from django.contrib.auth import views as auth_views
 
 # Define as rotas/URLs da aplicação
@@ -33,5 +34,18 @@ urlpatterns = [
     path('api/buscar/', views.buscar_produtos_ajax, name='buscar_produtos'),
     
     # Dashboard administrativo
-    path('dashboard/', views.estatisticas_dashboard, name='dashboard'),
+    path('dashboard/', admin_views.estatisticas_dashboard, name='dashboard'),
+    
+    # ========================================
+    # WEBHOOKS E APIs EXTERNAS
+    # ========================================
+    
+    # Webhook do Asaas (gateway de pagamento)
+    path('webhook/asaas/', webhook_views.webhook_asaas_pagamento, name='webhook_asaas'),
+    
+    # Webhook para atualizações de status via WhatsApp
+    path('webhook/whatsapp/status/', webhook_views.webhook_whatsapp_status, name='webhook_whatsapp_status'),
+    
+    # Health check para monitoramento
+    path('health/', webhook_views.health_check, name='health_check'),
 ]

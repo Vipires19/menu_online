@@ -11,6 +11,89 @@ from django.http import Http404
 from django.http import JsonResponse
 from .models import Pedido, PedidoReal
 from datetime import datetime, timedelta
+from .services import whatsapp_service
+
+def atualizar_status_pedido_global(pedido_id: str, novo_status: str, enviar_notificacao: bool = True) -> bool:
+    """
+    Função global para atualizar status de pedidos
+    Pode ser chamada de qualquer lugar (webhooks, views, etc.)
+    
+    Args:
+        pedido_id: ID do pedido (string)
+        novo_status: Novo status do pedido
+        enviar_notificacao: Se deve enviar notificação WhatsApp
+    
+    Returns:
+        bool: True se atualização foi bem-sucedida
+    """
+    try:
+        # Buscar pedido por id_pedido (string) ou ObjectId
+        try:
+            pedido = PedidoReal.objects.get(id_pedido=pedido_id)
+        except PedidoReal.DoesNotExist:
+            try:
+                pedido = PedidoReal.objects.get(id=pedido_id)
+            except PedidoReal.DoesNotExist:
+                print(f"❌ Pedido {pedido_id} não encontrado")
+                return False
+        
+        # Status válidos
+        status_validos = [
+            'Enviado para cozinha', 'Em preparo', 'Pronto', 
+            'Saiu para entrega', 'Retirada', 'Balcão', 'Concluído', 'Cancelado'
+        ]
+        
+        if novo_status not in status_validos:
+            print(f"❌ Status inválido: {novo_status}")
+            return False
+        
+        # Salvar status anterior
+        status_anterior = pedido.status
+        
+        # Adicionar ao histórico
+        historico_entry = {
+            'status': novo_status,
+            'data': datetime.now().isoformat(),
+            'descricao': f'Status alterado para: {novo_status}'
+        }
+        
+        if not pedido.historico_status:
+            pedido.historico_status = []
+        pedido.historico_status.append(historico_entry)
+        
+        # Atualizar status
+        pedido.status = novo_status
+        pedido.data_atualizacao = datetime.now().isoformat()
+        pedido.save()
+        
+        print(f"✅ Status do pedido {pedido_id} atualizado para: {novo_status}")
+        
+        # Enviar notificação WhatsApp se solicitado
+        if enviar_notificacao and pedido.cliente_telefone:
+            try:
+                sucesso_notificacao = whatsapp_service.enviar_notificacao_status_pedido(
+                    pedido_id=pedido.id_pedido,
+                    cliente_nome=pedido.cliente_nome,
+                    cliente_telefone=pedido.cliente_telefone,
+                    status_anterior=status_anterior,
+                    novo_status=novo_status,
+                    valor_total=pedido.valor_total_final,
+                    tipo_entrega=pedido.tipo_entrega
+                )
+                
+                if sucesso_notificacao:
+                    print(f"✅ Notificação WhatsApp enviada para {pedido.cliente_nome}")
+                else:
+                    print(f"❌ Falha ao enviar notificação WhatsApp")
+                    
+            except Exception as e:
+                print(f"❌ Erro ao enviar notificação WhatsApp: {str(e)}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Erro ao atualizar pedido {pedido_id}: {str(e)}")
+        return False
 
 # Helper para salvar imagem no storage padrão e gravar o caminho em produto.imagem
 def _save_uploaded_image_on_produto(produto, uploaded_file):
@@ -221,52 +304,32 @@ def pedidos_fila_preparo(request):
 def atualizar_status_pedido(request, pedido_id):
     """
     View para atualizar o status de um pedido via AJAX
+    Agora com notificações WhatsApp automáticas! 📱
     """
     if request.method == 'POST':
         try:
-            pedido = PedidoReal.objects.get(id=pedido_id)
             novo_status = request.POST.get('status')
             
-            # Status válidos
-            status_validos = [
-                'Enviado para cozinha', 'Em preparo', 'Pronto', 
-                'Saiu para entrega', 'Retirada', 'Balcão', 'Concluído', 'Cancelado'
-            ]
+            # Usar a função global para atualizar status
+            sucesso = atualizar_status_pedido_global(
+                pedido_id=pedido_id,
+                novo_status=novo_status,
+                enviar_notificacao=True
+            )
             
-            if novo_status in status_validos:
-                # Adicionar ao histórico de status
-                historico_entry = {
-                    'status': novo_status,
-                    'data': datetime.now().isoformat(),
-                    'descricao': f'Status alterado para: {novo_status}'
-                }
-                
-                if not pedido.historico_status:
-                    pedido.historico_status = []
-                pedido.historico_status.append(historico_entry)
-                
-                # Atualizar status e data
-                pedido.status = novo_status
-                pedido.data_atualizacao = datetime.now().isoformat()
-                
-                pedido.save()
-                
+            if sucesso:
                 return JsonResponse({
                     'success': True,
                     'message': f'Status atualizado para {novo_status}',
-                    'novo_status': novo_status
+                    'novo_status': novo_status,
+                    'notificacao_enviada': True
                 })
             else:
                 return JsonResponse({
                     'success': False,
-                    'message': 'Status inválido'
+                    'message': 'Erro ao atualizar status do pedido'
                 }, status=400)
                 
-        except PedidoReal.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'message': 'Pedido não encontrado'
-            }, status=404)
         except Exception as e:
             return JsonResponse({
                 'success': False,
@@ -394,3 +457,189 @@ def criar_pedido_manual(request):
         'produtos': produtos
     })
 
+
+@login_required
+def estatisticas_dashboard(request):
+    """
+    Dashboard completo com estatísticas avançadas do restaurante
+    Inclui filtros por período e métricas detalhadas
+    """
+    from datetime import datetime, timedelta
+    from .models import PedidoReal
+    import json
+    
+    # Parâmetros de filtro
+    periodo = request.GET.get('periodo', 'geral')  # 'hoje', 'mes', 'geral'
+    data_inicio = request.GET.get('data_inicio')
+    data_fim = request.GET.get('data_fim')
+    
+    # Definir filtros de data baseado no período
+    filtro_data = {}
+    hoje = datetime.now()
+    
+    if periodo == 'hoje':
+        inicio_dia = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
+        fim_dia = hoje.replace(hour=23, minute=59, second=59, microsecond=999999)
+        filtro_data = {
+            'data_criacao': {
+                '$gte': inicio_dia.isoformat(),
+                '$lte': fim_dia.isoformat()
+            }
+        }
+    elif periodo == 'mes':
+        inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        filtro_data = {
+            'data_criacao': {
+                '$gte': inicio_mes.isoformat()
+            }
+        }
+    elif data_inicio and data_fim:
+        filtro_data = {
+            'data_criacao': {
+                '$gte': data_inicio,
+                '$lte': data_fim
+            }
+        }
+    
+    # Buscar pedidos com filtro
+    pedidos_query = PedidoReal.objects
+    if filtro_data:
+        pedidos_query = pedidos_query(__raw__=filtro_data)
+    
+    pedidos = list(pedidos_query)
+    
+    # === ESTATÍSTICAS GERAIS ===
+    total_pedidos = len(pedidos)
+    pedidos_concluidos = len([p for p in pedidos if p.status == 'Concluído'])
+    pedidos_cancelados = len([p for p in pedidos if 'cancelado' in p.status.lower() or 'Cancelado' in p.status])
+    pedidos_em_andamento = len([p for p in pedidos if p.status not in ['Concluído', 'Cancelado']])
+    
+    # === VALORES FINANCEIROS ===
+    valor_total_arrecadado = sum([p.valor_total_final or 0 for p in pedidos if p.status == 'Concluído'])
+    valor_total_pedidos = sum([p.valor_total_final or 0 for p in pedidos])
+    valor_medio_pedido = valor_total_pedidos / total_pedidos if total_pedidos > 0 else 0
+    
+    # === ESTATÍSTICAS POR STATUS ===
+    status_counts = {}
+    for pedido in pedidos:
+        status = pedido.status  # Usar status direto da estrutura real
+        status_counts[status] = status_counts.get(status, 0) + 1
+    
+    # === ESTATÍSTICAS POR HORA (últimas 24h) ===
+    pedidos_por_hora = {}
+    if periodo == 'hoje':
+        for i in range(24):
+            pedidos_por_hora[f"{i:02d}:00"] = 0
+        
+        for pedido in pedidos:
+            try:
+                data_pedido = datetime.fromisoformat(pedido.data_criacao.replace('Z', '+00:00'))
+                hora = f"{data_pedido.hour:02d}:00"
+                pedidos_por_hora[hora] = pedidos_por_hora.get(hora, 0) + 1
+            except:
+                continue
+    
+    # === ESTATÍSTICAS POR DIA (últimos 30 dias) ===
+    pedidos_por_dia = {}
+    if periodo == 'mes':
+        for i in range(30):
+            data = hoje - timedelta(days=i)
+            dia_str = data.strftime('%d/%m')
+            pedidos_por_dia[dia_str] = 0
+        
+        for pedido in pedidos:
+            try:
+                data_pedido = datetime.fromisoformat(pedido.data_criacao.replace('Z', '+00:00'))
+                dia_str = data_pedido.strftime('%d/%m')
+                if dia_str in pedidos_por_dia:
+                    pedidos_por_dia[dia_str] += 1
+            except:
+                continue
+    
+    # === ESTATÍSTICAS DE PRODUTOS ===
+    produtos_por_categoria = list(Produto.objects.aggregate([
+        {"$match": {"disponivel": True}},
+        {"$group": {
+            "_id": "$categoria",
+            "total": {"$sum": 1},
+            "preco_medio": {"$avg": "$preco"}
+        }},
+        {"$sort": {"total": -1}}
+    ]))
+    
+    # === PRODUTOS MAIS VENDIDOS ===
+    produtos_vendidos = {}
+    for pedido in pedidos:
+        if hasattr(pedido, 'itens') and pedido.itens:
+            for item in pedido.itens:
+                # Verificar se o item tem o campo 'produto' e não está vazio
+                nome_produto = item.get('produto', '')
+                if nome_produto and nome_produto.strip() and nome_produto != 'Produto':  # Só adicionar se não estiver vazio e não for o fallback
+                    quantidade = item.get('quantidade', 1)
+                    produtos_vendidos[nome_produto] = produtos_vendidos.get(nome_produto, 0) + quantidade
+    
+    produtos_mais_vendidos = sorted(produtos_vendidos.items(), key=lambda x: x[1], reverse=True)[:10]
+    
+    # === FORMAS DE PAGAMENTO ===
+    formas_pagamento = {}
+    for pedido in pedidos:
+        forma = pedido.forma_pagamento or 'Não informado'
+        formas_pagamento[forma] = formas_pagamento.get(forma, 0) + 1
+    
+    # === TIPOS DE ENTREGA ===
+    tipos_entrega = {}
+    for pedido in pedidos:
+        tipo = pedido.tipo_entrega or 'Não informado'
+        tipos_entrega[tipo] = tipos_entrega.get(tipo, 0) + 1
+    
+    # === TAXA DE CONVERSÃO ===
+    taxa_conversao = (pedidos_concluidos / total_pedidos * 100) if total_pedidos > 0 else 0
+    
+    # === TEMPO MÉDIO DE PREPARO (simulado) ===
+    tempo_medio_preparo = 25  # minutos (simulado)
+    
+    # === CÁLCULOS PARA OS PROGRESS RINGS ===
+    taxa_conversao_restante = 100 - taxa_conversao
+    tempo_medio_restante = 60 - tempo_medio_preparo
+    
+    context = {
+        # Filtros
+        'periodo_atual': periodo,
+        'data_inicio': data_inicio,
+        'data_fim': data_fim,
+        
+        # Métricas principais
+        'total_pedidos': total_pedidos,
+        'pedidos_concluidos': pedidos_concluidos,
+        'pedidos_cancelados': pedidos_cancelados,
+        'pedidos_em_andamento': pedidos_em_andamento,
+        'valor_total_arrecadado': valor_total_arrecadado,
+        'valor_total_pedidos': valor_total_pedidos,
+        'valor_medio_pedido': valor_medio_pedido,
+        'taxa_conversao': taxa_conversao,
+        'tempo_medio_preparo': tempo_medio_preparo,
+        'taxa_conversao_restante': taxa_conversao_restante,
+        'tempo_medio_restante': tempo_medio_restante,
+        
+        # Estatísticas detalhadas
+        'status_counts': status_counts,
+        'produtos_por_categoria': produtos_por_categoria,
+        'produtos_mais_vendidos': produtos_mais_vendidos,
+        'formas_pagamento': formas_pagamento,
+        'tipos_entrega': tipos_entrega,
+        
+        # Dados para gráficos
+        'pedidos_por_hora': json.dumps(pedidos_por_hora),
+        'pedidos_por_dia': json.dumps(pedidos_por_dia),
+        'status_data': json.dumps(list(status_counts.items())),
+        'categorias_data': json.dumps([(cat['_id'], cat['total']) for cat in produtos_por_categoria]),
+        'produtos_vendidos_data': json.dumps(produtos_mais_vendidos),
+        'pagamento_data': json.dumps(list(formas_pagamento.items())),
+        'entrega_data': json.dumps(list(tipos_entrega.items())),
+        
+        # Estatísticas de produtos
+        'total_produtos': Produto.objects(disponivel=True).count(),
+        'total_categorias': len(produtos_por_categoria),
+    }
+    
+    return render(request, 'admin/dashboard.html', context)
