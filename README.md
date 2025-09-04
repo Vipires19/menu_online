@@ -161,6 +161,23 @@ Detalhes do produto
 
 Adicionar novos produtos
 ![Adicionar novos produtos](docs/images/adicionar_produto.png)
+
+Dashboard operacional
+![Dashboard 1](docs/images/dashboard_1.png)
+![Dashboard 2](docs/images/dashboard_2.png)
+![Dashboard 3](docs/images/dashboard_3.png)
+
+Fila de pedidos - Controle de status e produção
+![Pedido enviado para cozinha](docs/images/pedido_cozinha.png)
+![Pedido em preparo](docs/images/pedido_preparo.png)
+![Pedido pronto](docs/images/pedido_pronto.png)
+![Pedido saiu para entrega](docs/images/pedido_entrega.png)
+
+Fluxo de atendimento no whatsapp
+![Atendimento IA](docs/images/bot_wpp_1.png)
+![Atendimento IA](docs/images/bot_wpp_2.png)
+![Atendimento IA](docs/images/bot_wpp_3.png)
+
 ---
 
 ## 📄 Licença
