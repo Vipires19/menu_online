@@ -263,10 +263,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.getElementById('subtotal').value = `R$ ${subtotal.toFixed(2)}`;
         document.getElementById('total_final').value = `R$ ${totalFinal.toFixed(2)}`;
+        
     }
+    
 
     // Evento para taxa de entrega
     document.getElementById('valor_entrega').addEventListener('input', calcularTotal);
+    
 
     // Submissão do formulário
     document.getElementById('formPedido').addEventListener('submit', function(e) {

@@ -80,6 +80,21 @@
         <div class="mb-3">
             <h6><i class="fas fa-credit-card me-1"></i>Pagamento:</h6>
             <span class="badge bg-primary">{{ pedido.forma_pagamento|upper }}</span>
+            {% if pedido.forma_pagamento == 'dinheiro' %}
+                <div class="mt-2">
+                    <small class="text-muted">
+                        Status: <span class="badge bg-{% if pedido.status_pagamento == 'pago' %}success{% else %}warning{% endif %}">
+                            {{ pedido.status_pagamento_traduzido }}
+                        </span>
+                    </small>
+                    {% if pedido.valor_recebido %}
+                        <br><small class="text-muted">Valor recebido: R$ {{ pedido.valor_recebido|floatformat:2 }}</small>
+                    {% endif %}
+                    {% if pedido.precisa_troco %}
+                        <br><small class="text-success"><strong>Troco: R$ {{ pedido.troco_calculado|floatformat:2 }}</strong></small>
+                    {% endif %}
+                </div>
+            {% endif %}
         </div>
         {% endif %}
 
