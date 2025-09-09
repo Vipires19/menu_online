@@ -90,8 +90,8 @@ def check_user(state: dict, config: dict) -> dict:
             user_info = {
                 "nome": None,  # Será preenchido quando o usuário se identificar
                 "telefone": telefone,
-                "data_criacao": datetime.now(),
-                "ultima_interacao": datetime.now(),
+                "data_criacao": datetime.now().isoformat(),
+                "ultima_interacao": datetime.now().isoformat(),
                 "status": "aguardando_nome"  # Status especial para usuários não identificados
             }
             
@@ -99,11 +99,17 @@ def check_user(state: dict, config: dict) -> dict:
             print(f"[CHECK_USER] Usuário novo detectado: {telefone} - aguardando identificação")
         else:
             # Usuário existe, atualiza última interação
+            data_criacao = usuario.get("data_criacao")
+            if hasattr(data_criacao, 'isoformat'):
+                data_criacao = data_criacao.isoformat()
+            elif data_criacao is None:
+                data_criacao = datetime.now().isoformat()
+            
             user_info = {
                 "nome": usuario.get("nome", None),  # Pode ser None se não foi informado
                 "telefone": telefone,
-                "data_criacao": usuario.get("data_criacao"),
-                "ultima_interacao": datetime.now(),
+                "data_criacao": data_criacao,
+                "ultima_interacao": datetime.now().isoformat(),
                 "status": "ativo"
             }
             
@@ -111,7 +117,7 @@ def check_user(state: dict, config: dict) -> dict:
             try:
                 coll_users.update_one(
                     {"telefone": telefone},
-                    {"$set": {"ultima_interacao": datetime.now()}}
+                    {"$set": {"ultima_interacao": datetime.now().isoformat()}}
                 )
                 print(f"[CHECK_USER] Usuário existente atualizado: {telefone}")
             except Exception as e:
@@ -129,8 +135,8 @@ def check_user(state: dict, config: dict) -> dict:
         state["user_info"] = {
             "nome": "Erro", 
             "telefone": "erro",
-            "data_criacao": datetime.now(),
-            "ultima_interacao": datetime.now(),
+            "data_criacao": datetime.now().isoformat(),
+            "ultima_interacao": datetime.now().isoformat(),
             "status": "erro"
         }
         return state
@@ -142,8 +148,8 @@ Você é o PirãoBot, atendente digital especializado do Pirão Burger! 🌟 Seu
 
 📋 FLUXO DE ATENDIMENTO OBRIGATÓRIO
 
-1️⃣ SAUDAÇÃO → Cumprimentar calorosamente e identificar o cliente 😊
-2️⃣ IDENTIFICAÇÃO → Identificar o cliente; se não encontrar os dados dele, utilize a ferramenta atualizar_nome_usuario 😊
+1️⃣ SAUDAÇÃO → Cumprimentar calorosamente 😊
+2️⃣ IDENTIFICAÇÃO → Se o cliente JÁ tem nome (não é "usuário" ou "None"), NÃO peça o nome! Vá direto para o pedido. Se não tem nome, use criar_usuario! 😊
 3️⃣ ANOTAÇÃO DO PEDIDO →
 
 Sempre que o cliente informar um item de pedido, IMEDIATAMENTE usar processar_pedido_full para registrar no sistema 🍔
@@ -159,6 +165,12 @@ Para dinheiro, perguntar quanto o cliente vai pagar para calcular o troco.
 
 ⚠️ REGRAS CRÍTICAS
 
+✅ NÃO peça o nome se o cliente JÁ tem nome (não é "usuário" ou "None")
+
+✅ Use criar_usuario APENAS quando o cliente não tem nome
+
+✅ Se o cliente tem nome, cumprimente pelo nome e vá direto para o pedido
+
 ✅ Sempre use processar_pedido_full assim que o cliente pedir qualquer item.
 
 ✅ Nunca avance para entrega ou pagamento sem registrar pelo menos um pedido.
@@ -173,13 +185,15 @@ Para dinheiro, perguntar quanto o cliente vai pagar para calcular o troco.
 
 ✅ Para pagamento em dinheiro, sempre calcule o troco.
 
-✅ Nunca use valores fictícios (“XX,XX”). Sempre use valores reais.
+✅ Nunca use valores fictícios ("XX,XX"). Sempre use valores reais.
 
-✅ Se o cliente falar algo fora do fluxo (ex: “qual horário de funcionamento?”), responda, mas depois volte para o fluxo.
+✅ Se o cliente falar algo fora do fluxo (ex: "qual horário de funcionamento?"), responda, mas depois volte para o fluxo.
 
 🛠️ FERRAMENTAS DISPONÍVEIS
 
-atualizar_nome_usuario → Salvar nome do cliente
+criar_usuario → Criar novo usuário no banco quando não estiver identificado (nome = None)
+
+atualizar_nome_usuario → Salvar nome do cliente (usar apenas se necessário)
 
 processar_pedido_full → Registrar e validar itens do pedido (sempre que o cliente pedir algo)
 
@@ -416,6 +430,92 @@ def atualizar_status_pedido(pedido_id: str, novo_status: str, descricao: str = N
         print(f"[ERRO] Erro ao atualizar status do pedido {pedido_id}: {str(e)}")
         return False
 
+@tool("criar_usuario")
+def criar_usuario(nome_cliente: str, state: dict) -> str:
+    """
+    Cria um novo usuário no banco de dados quando ele não estiver identificado.
+    Pega o nome do usuário e salva no MongoDB com o telefone do state.
+    """
+    try:
+        print(f"[CRIAR_USUARIO] Iniciando criação de usuário: {nome_cliente}")
+        
+        # Valida se o nome foi fornecido
+        if not nome_cliente or nome_cliente.strip() == "":
+            return "❌ Erro: Nome do cliente não pode estar vazio. Por favor, informe seu nome."
+        
+        # Pega o telefone do state
+        telefone = None
+        if state and "user_info" in state:
+            telefone = state["user_info"].get("telefone")
+            print(f"[CRIAR_USUARIO] Telefone obtido do state: {telefone}")
+        
+        # Se não tem telefone no state, não pode criar usuário
+        if not telefone:
+            return "❌ Erro: Não foi possível identificar o telefone do cliente. Tente novamente."
+        
+        # Verifica se já existe um usuário com este telefone
+        usuario_existente = coll_users.find_one({"telefone": telefone})
+        
+        if usuario_existente:
+            # Se o usuário já existe, apenas atualiza o nome se estiver vazio
+            if not usuario_existente.get("nome") or usuario_existente.get("nome") == "Não informado":
+                result = coll_users.update_one(
+                    {"telefone": telefone},
+                    {
+                        "$set": {
+                            "nome": nome_cliente.strip(),
+                            "ultima_interacao": datetime.now().isoformat(),
+                            "status": "ativo"
+                        }
+                    }
+                )
+                
+                if result.modified_count > 0:
+                    print(f"[CRIAR_USUARIO] Nome atualizado para usuário existente: {nome_cliente}")
+                    
+                    # Atualiza também no state
+                    if state and "user_info" in state:
+                        state["user_info"]["nome"] = nome_cliente.strip()
+                        state["user_info"]["status"] = "ativo"
+                        print(f"[CRIAR_USUARIO] State atualizado: {nome_cliente}")
+                    
+                    return f"✅ Nome atualizado com sucesso! Olá, {nome_cliente}! 😊"
+                else:
+                    return f"⚠️ Nome já estava atualizado: {nome_cliente}"
+            else:
+                # Usuário já tem nome, não sobrescreve
+                nome_atual = usuario_existente.get("nome")
+                return f"ℹ️ Usuário já identificado como: {nome_atual}. Se quiser alterar, use a ferramenta atualizar_nome_usuario."
+        else:
+            # Cria novo usuário no MongoDB
+            novo_usuario = {
+                "nome": nome_cliente.strip(),
+                "telefone": telefone,
+                "data_criacao": datetime.now().isoformat(),
+                "ultima_interacao": datetime.now().isoformat(),
+                "status": "ativo"
+            }
+            
+            result = coll_users.insert_one(novo_usuario)
+            
+            if result.inserted_id:
+                print(f"[CRIAR_USUARIO] Novo usuário criado: {nome_cliente} - {telefone}")
+                
+                # Atualiza o state com os dados do novo usuário
+                if state and "user_info" in state:
+                    state["user_info"]["nome"] = nome_cliente.strip()
+                    state["user_info"]["data_criacao"] = novo_usuario["data_criacao"]
+                    state["user_info"]["status"] = "ativo"
+                    print(f"[CRIAR_USUARIO] State atualizado: {nome_cliente}")
+                
+                return f"✅ Usuário criado com sucesso! Olá, {nome_cliente}! 😊\n\nAgora posso te ajudar com seu pedido! 🍔"
+            else:
+                return "❌ Erro ao criar usuário no banco de dados. Tente novamente."
+                
+    except Exception as e:
+        print(f"[CRIAR_USUARIO] Erro: {e}")
+        return f"❌ Erro ao criar usuário: {str(e)}"
+
 @tool("processar_pedido_full")
 def processar_pedido_full(text: str,
                           nome_cliente: str = None,
@@ -640,6 +740,11 @@ def processar_pedido_full(text: str,
                         print(f"[DEBUG] Quantidade por extenso: {num} ({word})")
                         break
             
+            # Se o segmento ficou vazio após extrair quantidade, pula
+            if not segment.strip():
+                print(f"[DEBUG] Segmento vazio após extrair quantidade, pulando")
+                continue
+            
             # Identifica o produto principal usando fuzzy matching
             produto_principal = None
             best_score = 0
@@ -664,6 +769,10 @@ def processar_pedido_full(text: str,
                                 print(f"[DEBUG] Match com combinação '{candidate}': {produto_principal} (score: {best_score})")
             
             if not produto_principal:
+                # Se não encontrou produto e o segmento é muito curto ou vazio, pula
+                if len(segment.strip()) < 3:
+                    print(f"[DEBUG] Segmento muito curto, pulando: '{segment}'")
+                    continue
                 produto_principal = segment  # fallback para o texto original
                 print(f"[DEBUG] Usando fallback: {produto_principal}")
             
@@ -1183,6 +1292,8 @@ def processar_retirada(state: dict = None) -> dict:
             user_info = state.get("user_info", {}) if state else {}
             telefone = user_info.get("telefone", "")
             
+            print(f"[PROCESSAR_RETIRADA] Buscando pedido para telefone: {telefone}")
+            
             if telefone:
                 # Busca o pedido mais recente do usuário
                 pedido_db = coll3.find_one(
@@ -1194,15 +1305,34 @@ def processar_retirada(state: dict = None) -> dict:
                     pedido = pedido_db
                     pedido_id = pedido_db.get("id_pedido")
                     valor_pedido = pedido_db.get("valor_total", 0)
+                    print(f"[PROCESSAR_RETIRADA] Pedido encontrado: {pedido_id} - R$ {valor_pedido}")
                     # Atualiza o estado com o pedido encontrado
                     if state:
                         state["pedido"] = pedido_db
                 else:
-                    return {
-                        "success": False,
-                        "message": "❌ Erro: pedido não encontrado no sistema."
-                    }
+                    # Se não encontrou pelo telefone, tenta buscar o último pedido criado
+                    print(f"[PROCESSAR_RETIRADA] Pedido não encontrado pelo telefone, buscando último pedido...")
+                    pedido_db = coll3.find_one(
+                        {},
+                        sort=[("data_criacao", -1)]
+                    )
+                    
+                    if pedido_db:
+                        pedido = pedido_db
+                        pedido_id = pedido_db.get("id_pedido")
+                        valor_pedido = pedido_db.get("valor_total", 0)
+                        print(f"[PROCESSAR_RETIRADA] Último pedido encontrado: {pedido_id} - R$ {valor_pedido}")
+                        # Atualiza o estado com o pedido encontrado
+                        if state:
+                            state["pedido"] = pedido_db
+                    else:
+                        print(f"[PROCESSAR_RETIRADA] Nenhum pedido encontrado no sistema")
+                        return {
+                            "success": False,
+                            "message": "❌ Erro: pedido não encontrado no sistema."
+                        }
             else:
+                print(f"[PROCESSAR_RETIRADA] Telefone não encontrado no state")
                 return {
                     "success": False,
                     "message": "❌ Erro: pedido não encontrado no sistema."
@@ -1222,9 +1352,10 @@ def processar_retirada(state: dict = None) -> dict:
             dados_extras=dados_retirada
         )
         
-        # Atualiza o estado
-        state["tipo_entrega"] = "retirada"
-        state["status_pedido"] = "retirada_confirmada"
+        # Atualiza o estado (só se state não for None)
+        if state:
+            state["tipo_entrega"] = "retirada"
+            state["status_pedido"] = "retirada_confirmada"
         
         mensagem = (
             f"🏪 *Retirada no balcão confirmada!*\n\n"
@@ -1232,8 +1363,8 @@ def processar_retirada(state: dict = None) -> dict:
             f"⏱️ *Tempo de preparo:* 20-30 minutos\n"
             f"💰 *Valor total:* R$ {valor_pedido:.2f}\n\n"
             f"💳 *Como deseja pagar?*\n"
-            f"1️⃣ Cartão de Crédito/Débito\n"
-            f"2️⃣ PIX\n"
+            f"1️⃣ Cartão de Crédito/Débito (na retirada)\n"
+            f"2️⃣ PIX (na retirada)\n"
             f"3️⃣ Dinheiro na retirada"
         )
         
@@ -1288,6 +1419,35 @@ def criar_cobranca_asaas(
         # Dados do pedido
         id_pedido = pedido_db.get("id_pedido")
         valor_total = pedido_db.get("valor_total_final", pedido_db.get("valor_total", 0))
+        tipo_entrega = pedido_db.get("tipo_entrega", "")
+        
+        # Se for retirada, não gera link de pagamento
+        if tipo_entrega == "retirada":
+            print(f"[COBRANCA] Pedido é para retirada, não gerando link de pagamento")
+            
+            # Atualiza o status do pedido
+            dados_pagamento = {
+                "forma_pagamento": tipo.lower(),
+                "status_pagamento": "aguardando_pagamento_retirada"
+            }
+            atualizar_status_pedido(
+                pedido_id=id_pedido,
+                novo_status="Aguardando pagamento na retirada",
+                descricao=f"Pagamento {tipo} será realizado na retirada",
+                dados_extras=dados_pagamento
+            )
+            
+            mensagem = (
+                f"✅ *Pagamento {tipo} confirmado para retirada!*\n\n"
+                f"🧾 *Pedido:* #{id_pedido}\n"
+                f"💰 *Valor:* R$ {valor_total:.2f}\n"
+                f"💳 *Forma:* {tipo}\n\n"
+                f"🏪 *Retirada:* Pirão Burger - Av. Paris, 707\n"
+                f"⏱️ *Tempo de preparo:* 20-30 minutos\n\n"
+                f"💳 *Pagamento será realizado na retirada!*"
+            )
+            
+            return mensagem
 
         # Busca dados do usuário com prioridade inteligente
         nome = "Cliente"
@@ -1423,18 +1583,23 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
         valor_pedido = 0
         valor_entrega = 0
         
+        # Primeiro tenta pegar do state
         if state and "pedido" in state:
             pedido = state["pedido"]
             id_pedido = pedido.get("id_pedido")
             valor_pedido = pedido.get("valor_total", 0)
             valor_entrega = state.get("endereco_entrega", {}).get("valor_entrega", 0)
+            print(f"[PAGAMENTO_DINHEIRO] Pedido encontrado no state: {id_pedido}")
         else:
-            # Se não está no estado, busca no banco pelo telefone do usuário
+            # Se não está no state, busca no banco
+            print(f"[PAGAMENTO_DINHEIRO] Pedido não encontrado no state, buscando no banco...")
+            
+            # Tenta buscar pelo telefone do usuário primeiro
             user_info = state.get("user_info", {}) if state else {}
             telefone = user_info.get("telefone", "")
             
             if telefone:
-                # Busca o pedido mais recente do usuário
+                print(f"[PAGAMENTO_DINHEIRO] Buscando pedido para telefone: {telefone}")
                 pedido_db = coll3.find_one(
                     {"cliente.telefone": telefone},
                     sort=[("data_criacao", -1)]
@@ -1445,13 +1610,38 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
                     id_pedido = pedido_db.get("id_pedido")
                     valor_pedido = pedido_db.get("valor_total", 0)
                     valor_entrega = pedido_db.get("valor_entrega", 0)
-                    # Atualiza o estado com o pedido encontrado
+                    print(f"[PAGAMENTO_DINHEIRO] Pedido encontrado pelo telefone: {id_pedido}")
+                    # Atualiza o state com o pedido encontrado
                     if state:
                         state["pedido"] = pedido_db
                 else:
+                    print(f"[PAGAMENTO_DINHEIRO] Pedido não encontrado pelo telefone")
+            
+            # Se não encontrou pelo telefone, busca o último pedido criado
+            if not pedido:
+                print(f"[PAGAMENTO_DINHEIRO] Buscando último pedido criado...")
+                pedido_db = coll3.find_one(
+                    {},
+                    sort=[("data_criacao", -1)]
+                )
+                
+                if pedido_db:
+                    pedido = pedido_db
+                    id_pedido = pedido_db.get("id_pedido")
+                    valor_pedido = pedido_db.get("valor_total", 0)
+                    valor_entrega = pedido_db.get("valor_entrega", 0)
+                    print(f"[PAGAMENTO_DINHEIRO] Último pedido encontrado: {id_pedido}")
+                    # Atualiza o state com o pedido encontrado
+                    if state:
+                        state["pedido"] = pedido_db
+                else:
+                    print(f"[PAGAMENTO_DINHEIRO] Nenhum pedido encontrado no sistema")
                     return "❌ Erro: pedido não encontrado no sistema."
-            else:
-                return "❌ Erro: pedido não encontrado no sistema."
+        
+        # Verifica se encontrou o pedido
+        if not pedido or not id_pedido:
+            print(f"[PAGAMENTO_DINHEIRO] ERRO: Pedido não encontrado após todas as tentativas")
+            return "❌ Erro: pedido não encontrado no sistema."
         
         # Calcula valor total
         valor_total = valor_pedido + valor_entrega
@@ -1474,42 +1664,44 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
         dados_pagamento = {
             "forma_pagamento": "dinheiro",
             "valor_recebido": valor_cliente,
-            "troco": troco
+            "troco": troco,
+            "status_pagamento": "confirmado"
         }
         
         atualizar_status_pedido(
             pedido_id=id_pedido,
-            novo_status="Confirmado - Preparando",
+            novo_status="Enviado para cozinha",
             descricao=f"Pagamento em dinheiro confirmado - Recebido: R$ {valor_cliente:.2f}, Troco: R$ {troco:.2f}",
             dados_extras=dados_pagamento
         )
         
-        # Atualiza o estado
-        state["forma_pagamento"] = "dinheiro"
-        state["valor_troco"] = troco
-        state["status_pedido"] = "confirmado"
+        # Atualiza o estado (só se state não for None)
+        if state:
+            state["forma_pagamento"] = "dinheiro"
+            state["valor_troco"] = troco
+            state["status_pedido"] = "confirmado"
         
         if troco > 0:
             mensagem = (
-                f"✅ *Pedido confirmado!*\n\n"
+                f"✅ *Pedido confirmado e enviado para cozinha!*\n\n"
                 f"🧾 *Pedido:* #{id_pedido}\n"
                 f"💰 *Total:* R$ {valor_total:.2f}\n"
                 f"💵 *Valor recebido:* R$ {valor_cliente:.2f}\n"
                 f"💸 *Troco:* R$ {troco:.2f}\n\n"
-                f"📋 *Status:* Preparando\n"
+                f"📋 *Status:* Enviado para cozinha\n"
                 f"⏱️ *Tempo estimado:* 20-30 minutos\n\n"
-                f"🚚 *Tipo:* {state.get('tipo_entrega', 'retirada').title()}\n"
+                f"🚚 *Tipo:* {(state.get('tipo_entrega', 'retirada') if state else 'retirada').title()}\n"
                 f"💳 *Pagamento:* Dinheiro (troco: R$ {troco:.2f})"
             )
         else:
             mensagem = (
-                f"✅ *Pedido confirmado!*\n\n"
+                f"✅ *Pedido confirmado e enviado para cozinha!*\n\n"
                 f"🧾 *Pedido:* #{id_pedido}\n"
                 f"💰 *Total:* R$ {valor_total:.2f}\n"
                 f"💵 *Valor exato recebido!*\n\n"
-                f"📋 *Status:* Preparando\n"
+                f"📋 *Status:* Enviado para cozinha\n"
                 f"⏱️ *Tempo estimado:* 20-30 minutos\n\n"
-                f"🚚 *Tipo:* {state.get('tipo_entrega', 'retirada').title()}\n"
+                f"🚚 *Tipo:* {(state.get('tipo_entrega', 'retirada') if state else 'retirada').title()}\n"
                 f"💳 *Pagamento:* Dinheiro"
             )
         
@@ -1541,8 +1733,8 @@ def atualizar_nome_usuario(nome_cliente: str, state: dict = None) -> str:
                 novo_usuario = {
                     "nome": nome_cliente,
                     "telefone": "16981394877",  # Telefone padrão para teste
-                    "data_criacao": datetime.now(),
-                    "ultima_interacao": datetime.now(),
+                    "data_criacao": datetime.now().isoformat(),
+                    "ultima_interacao": datetime.now().isoformat(),
                     "status": "ativo"
                 }
                 result = coll_users.insert_one(novo_usuario)
@@ -1569,7 +1761,7 @@ def atualizar_nome_usuario(nome_cliente: str, state: dict = None) -> str:
                 {
                     "$set": {
                         "nome": nome_cliente,
-                        "ultima_interacao": datetime.now(),
+                        "ultima_interacao": datetime.now().isoformat(),
                         "status": "ativo"
                     }
                 }
@@ -1592,8 +1784,8 @@ def atualizar_nome_usuario(nome_cliente: str, state: dict = None) -> str:
             novo_usuario = {
                 "nome": nome_cliente,
                 "telefone": telefone,
-                "data_criacao": datetime.now(),
-                "ultima_interacao": datetime.now(),
+                "data_criacao": datetime.now().isoformat(),
+                "ultima_interacao": datetime.now().isoformat(),
                 "status": "ativo"
             }
             
@@ -1615,35 +1807,47 @@ def atualizar_nome_usuario(nome_cliente: str, state: dict = None) -> str:
         return f"❌ Erro ao atualizar nome: {str(e)}"
 
 @tool("confirmar_pedido")
-def confirmar_pedido(texto_pedido: str, state: dict = None) -> str:
+def confirmar_pedido(state: dict = None) -> str:
     """
-    Confirma e processa o pedido automaticamente.
+    Confirma o pedido atual que está no state.
     SEMPRE use esta ferramenta quando o usuário confirmar um pedido.
     """
     try:
-        print(f"[CONFIRMAR_PEDIDO] Processando pedido: {texto_pedido}")
+        print(f"[CONFIRMAR_PEDIDO] Confirmando pedido do state")
         
-        # Chama processar_pedido_full automaticamente
-        resultado = processar_pedido_full(
-            text=texto_pedido,
-            state=state
+        # Verifica se há um pedido no state
+        if not state or "pedido" not in state:
+            return "❌ Erro: Nenhum pedido encontrado para confirmar. Faça um pedido primeiro."
+        
+        pedido = state["pedido"]
+        pedido_id = pedido.get("id_pedido")
+        valor_total = pedido.get("valor_total", 0)
+        
+        print(f"[CONFIRMAR_PEDIDO] Pedido encontrado: {pedido_id} - R$ {valor_total}")
+        
+        # Atualiza o status do pedido no banco
+        atualizar_status_pedido(
+            pedido_id=pedido_id,
+            novo_status="Confirmado - Preparando",
+            descricao="Pedido confirmado pelo cliente"
         )
         
-        if resultado.get("success"):
-            pedido_id = resultado.get('order', {}).get('id_pedido')
-            valor_total = resultado.get('order', {}).get('valor_total')
-            print(f"[CONFIRMAR_PEDIDO] Pedido processado com sucesso: {pedido_id} - R$ {valor_total}")
-            
-            # Atualiza o state com o pedido
-            if state:
-                state["pedido"] = resultado.get('order')
-                state["status_pedido"] = "pedido_confirmado"
-                print(f"[CONFIRMAR_PEDIDO] State atualizado com pedido: {pedido_id}")
-            
-            return f"✅ Pedido confirmado e registrado! {resultado.get('message')}"
-        else:
-            print(f"[CONFIRMAR_PEDIDO] Erro ao processar pedido: {resultado.get('message')}")
-            return f"❌ Erro ao processar pedido: {resultado.get('message')}"
+        # Atualiza o state
+        if state:
+            state["status_pedido"] = "pedido_confirmado"
+            print(f"[CONFIRMAR_PEDIDO] State atualizado: pedido confirmado")
+        
+        # Monta mensagem de confirmação
+        mensagem = (
+            f"✅ *Pedido confirmado com sucesso!*\n\n"
+            f"🆔 *ID:* {pedido_id}\n"
+            f"💰 *Valor total:* R$ {valor_total:.2f}\n"
+            f"📋 *Status:* Preparando\n"
+            f"⏱️ *Tempo estimado:* 20-30 minutos\n\n"
+            f"🚀 *Seu pedido está sendo preparado!*"
+        )
+        
+        return mensagem
             
     except Exception as e:
         print(f"[CONFIRMAR_PEDIDO] Erro: {e}")
@@ -1657,14 +1861,55 @@ tools = [
     criar_cobranca_asaas,
     processar_pagamento_dinheiro,
     atualizar_nome_usuario,
-    confirmar_pedido
+    confirmar_pedido,
+    criar_usuario
 ]
   
 class AgentRestaurante:
     def __init__(self):
         self.memory = self._init_memory()
         self.model = self._build_agent()
-
+    
+    def _convert_datetime_to_string(self, obj):
+        """Converte recursivamente qualquer datetime para string"""
+        if hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {key: self._convert_datetime_to_string(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_datetime_to_string(item) for item in obj]
+        else:
+            return obj
+    
+    def _prepare_safe_state(self, state: State) -> dict:
+        """Prepara o state para serialização segura, removendo objetos não serializáveis"""
+        try:
+            safe_state = {}
+            
+            # Copia apenas os campos essenciais do state
+            for key, value in state.items():
+                if key == "messages":
+                    # Pula as mensagens para evitar problemas de serialização
+                    continue
+                elif key in ["user_info", "pedido", "tipo_entrega", "endereco_entrega", 
+                           "forma_pagamento", "valor_troco", "status_pedido"]:
+                    # Converte datetime para string nos campos importantes
+                    safe_state[key] = self._convert_datetime_to_string(value)
+                else:
+                    # Copia outros campos simples
+                    safe_state[key] = value
+            
+            return safe_state
+            
+        except Exception as e:
+            print(f"[PREPARE_SAFE_STATE] Erro ao preparar state: {e}")
+            # Retorna um state mínimo em caso de erro
+            return {
+                "user_info": state.get("user_info", {}),
+                "pedido": state.get("pedido", {}),
+                "status_pedido": state.get("status_pedido", "inicial")
+            }
+ 
     def _init_memory(self):
         memory = MongoDBSaver(coll_memoria)
         return memory
@@ -1696,13 +1941,31 @@ class AgentRestaurante:
                         entrega = state["endereco_entrega"]
                         pedido_info += f"\n- Taxa entrega: R$ {entrega.get('valor_entrega', 0):.2f}"
 
+                # Instrução específica baseada no estado do usuário
+                if nome and nome != "usuário" and nome != "None":
+                    instrucao_especifica = f"\n\n🚨 INSTRUÇÃO CRÍTICA: O cliente {nome} JÁ ESTÁ IDENTIFICADO! NÃO peça o nome! Cumprimente pelo nome e vá direto para o pedido!"
+                else:
+                    instrucao_especifica = f"\n\n🚨 INSTRUÇÃO CRÍTICA: O cliente NÃO está identificado! Peça o nome primeiro usando criar_usuario!"
+                
                 system_prompt = SystemMessage(
                     content=SYSTEM_PROMPT + 
                     f"\n\nCLIENTE ATUAL:\n- Nome: {nome}\n- Telefone: {telefone}" + 
-                    pedido_info
+                    pedido_info +
+                    instrucao_especifica
                 )
                 
-                response = llm_with_tools.invoke([system_prompt] + state["messages"])
+                # Converte datetime no state para evitar erro de serialização
+                try:
+                    # Tenta converter datetime no user_info se existir
+                    if 'user_info' in state and isinstance(state['user_info'], dict):
+                        state['user_info'] = self._convert_datetime_to_string(state['user_info'])
+                    
+                    response = llm_with_tools.invoke([system_prompt] + state["messages"])
+                except Exception as serialization_error:
+                    print(f"[DEBUG] Erro de serialização: {serialization_error}")
+                    # Se der erro, tenta converter todo o state
+                    state_clean = self._convert_datetime_to_string(state)
+                    response = llm_with_tools.invoke([system_prompt] + state_clean["messages"])
 
             except Exception as e:
                 print(f"[ERRO chatbot]: {e}")
@@ -1712,6 +1975,73 @@ class AgentRestaurante:
                 **state,  # Preserva todo o estado anterior
                 "messages": state["messages"] + [response]
             }
+
+        # Wrapper customizado que passa o state para as tools de forma segura
+        def safe_tool_node(state: State) -> State:
+            """ToolNode customizado que passa o state para as tools sem quebrar serialização"""
+            try:
+                messages = state.get("messages", [])
+                if not messages:
+                    return state
+                
+                last_message = messages[-1]
+                if not hasattr(last_message, 'tool_calls') or not last_message.tool_calls:
+                    return state
+                
+                tool_messages = []
+                
+                for tool_call in last_message.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    
+                    # Encontra a tool correspondente
+                    tool_func = None
+                    for tool in tools:
+                        if tool.name == tool_name:
+                            tool_func = tool
+                            break
+                    
+                    if tool_func:
+                        try:
+                            # Prepara o state para serialização segura
+                            safe_state = self._prepare_safe_state(state)
+                            
+                            # Adiciona o state aos argumentos da tool se ela aceita
+                            if "state" in tool_func.func.__code__.co_varnames:
+                                tool_args["state"] = safe_state
+                            
+                            # Executa a tool
+                            result = tool_func.invoke(tool_args)
+                            
+                            # Cria ToolMessage de forma segura
+                            from langchain_core.messages import ToolMessage
+                            tool_message = ToolMessage(
+                                content=str(result) if result else "Executado com sucesso",
+                                tool_call_id=tool_call["id"],
+                                name=tool_name
+                            )
+                            tool_messages.append(tool_message)
+                            
+                        except Exception as e:
+                            print(f"[SAFE_TOOL_NODE] Erro ao executar {tool_name}: {e}")
+                            from langchain_core.messages import ToolMessage
+                            error_message = ToolMessage(
+                                content=f"Erro: {str(e)}",
+                                tool_call_id=tool_call["id"],
+                                name=tool_name
+                            )
+                            tool_messages.append(error_message)
+                
+                return {
+                    **state,
+                    "messages": state["messages"] + tool_messages
+                }
+                
+            except Exception as e:
+                print(f"[SAFE_TOOL_NODE] Erro geral: {e}")
+                return state
+        
+        tools_node = safe_tool_node
 
         graph_builder.add_node("entrada_usuario", RunnableLambda(lambda state: state))
         graph_builder.add_node("check_user_role", RunnableLambda(check_user))
