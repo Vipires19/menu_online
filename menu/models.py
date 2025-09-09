@@ -235,6 +235,11 @@ class PedidoReal(Document):
     cobranca_id = fields.StringField()
     link_pagamento = fields.StringField()
     
+    # Campos para pagamento em dinheiro
+    status_pagamento = fields.StringField()  # "pendente", "pago", "cancelado"
+    valor_recebido = fields.FloatField()  # Valor que o cliente entregou
+    troco = fields.FloatField()  # Troco a ser devolvido
+    
     meta = {
         'collection': 'pedidos',  # Usar a mesma coleção
         'ordering': ['-data_criacao'],
@@ -308,3 +313,28 @@ class PedidoReal(Document):
             return 'bg-danger text-white'
         else:
             return 'bg-secondary text-white'
+    
+    @property
+    def troco_calculado(self):
+        """Calcula o troco quando pagamento é em dinheiro"""
+        if self.forma_pagamento == 'dinheiro' and self.valor_recebido and self.valor_total_final:
+            return max(0, self.valor_recebido - self.valor_total_final)
+        return 0
+    
+    @property
+    def status_pagamento_traduzido(self):
+        """Traduz o status de pagamento para português"""
+        traducoes = {
+            'pendente': 'Pendente',
+            'pago': 'Pago',
+            'cancelado': 'Cancelado',
+            'aguardando': 'Aguardando Pagamento'
+        }
+        return traducoes.get(self.status_pagamento, self.status_pagamento or 'Não informado')
+    
+    @property
+    def precisa_troco(self):
+        """Verifica se precisa de troco"""
+        return (self.forma_pagamento == 'dinheiro' and 
+                self.valor_recebido and 
+                self.valor_recebido > self.valor_total_final)
