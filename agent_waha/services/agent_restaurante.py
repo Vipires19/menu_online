@@ -525,6 +525,7 @@ def processar_pedido_full(text: str,
                           state: dict = None) -> dict:
     """
     Tool para processar pedidos complexos com múltiplos itens, adicionais específicos e observações.
+    NOVA FUNCIONALIDADE: Acumula itens em um único pedido em vez de criar pedidos separados.
     
     Exemplo de entrada: "dois pirão burger sem cebola com bacon extra em um deles e quero tambem mais um smash burger"
     
@@ -560,6 +561,27 @@ def processar_pedido_full(text: str,
         }
     
     print(f"[PEDIDO] Dados finais: nome={nome_cliente}, telefone={telefone}")
+    
+    # NOVA LÓGICA: Verifica se já existe um pedido em andamento para este cliente
+    pedido_existente = None
+    if state and "pedido" in state:
+        pedido_existente = state["pedido"]
+        print(f"[PEDIDO] Pedido existente encontrado no state: {pedido_existente.get('id_pedido')}")
+    else:
+        # Busca pedido existente no banco pelo telefone do cliente
+        pedido_db = coll3.find_one(
+            {
+                "cliente.telefone": telefone,
+                "status": {"$in": ["Aguardando definição de entrega", "Aguardando forma de pagamento"]}
+            },
+            sort=[("data_criacao", -1)]
+        )
+        if pedido_db:
+            pedido_existente = pedido_db
+            print(f"[PEDIDO] Pedido existente encontrado no banco: {pedido_db.get('id_pedido')}")
+            # Atualiza o state com o pedido encontrado
+            if state:
+                state["pedido"] = pedido_db
     
     # ---------- CONSTANTES E HELPERS ----------
     NUM_WORDS = {
@@ -956,24 +978,22 @@ def processar_pedido_full(text: str,
                 "message": "Alguns adicionais precisam de confirmação. Verifique as sugestões."
             }
         
-        # 3) Monta o pedido final com estrutura detalhada
-        id_pedido = str(uuid.uuid4())[:8]
-        itens_pedido = []
-        valor_total = 0.0
+        # 3) Monta os novos itens para adicionar ao pedido
+        novos_itens = []
+        valor_novos_itens = 0.0
         
         for idx, item in enumerate(itens_validados):
             produto_doc = coll5.find_one({"_id": ObjectId(item["produto_id"])})
             preco_base = float(produto_doc.get("preco", 0.0))
             valor_adicionais = sum([ad["valor"] for ad in item["adicionais"]])
             subtotal = round(preco_base + valor_adicionais, 2)
-            valor_total += subtotal
+            valor_novos_itens += subtotal
             
             print(f"[PEDIDO] Item {idx+1}: {item['nome_produto']} - Preço base: R$ {preco_base:.2f}, Adicionais: R$ {valor_adicionais:.2f}, Subtotal: R$ {subtotal:.2f}")
             print(f"[PEDIDO] Produto encontrado: {produto_doc.get('nome')} - Preço: R$ {produto_doc.get('preco')}")
             
             # Estrutura detalhada para cozinha, caixa e entregador
             item_detalhado = {
-                "item_id": idx + 1,  # ID sequencial do item
                 "produto": item["nome_produto"],
                 "produto_id": item["produto_id"],
                 "quantidade": 1,
@@ -990,80 +1010,152 @@ def processar_pedido_full(text: str,
                 }
             }
             
-            itens_pedido.append(item_detalhado)
+            novos_itens.append(item_detalhado)
         
-        print(f"[PEDIDO] Valor total calculado: R$ {valor_total:.2f}")
+        print(f"[PEDIDO] Valor dos novos itens: R$ {valor_novos_itens:.2f}")
         
-        # 4) Salva no MongoDB com estrutura completa
-        pedido = {
-            "id_pedido": id_pedido,
-            "cliente": {"nome": nome_cliente, "telefone": telefone},
-            "itens": itens_pedido,
-            "valor_total": round(valor_total, 2),
-            "status": "Aguardando definição de entrega",
-            "data_criacao": datetime.utcnow().isoformat(),
-            "data_atualizacao": datetime.utcnow().isoformat(),
-            "tipo_entrega": None,  # será preenchido depois
-            "endereco_entrega": None,
-            "forma_pagamento": None,
-            "valor_entrega": 0.0,
-            "valor_total_final": round(valor_total, 2),  # Inicialmente igual ao valor do pedido
-            "historico_status": [
+        # 4) LÓGICA DE ACUMULAÇÃO: Adiciona itens ao pedido existente ou cria novo
+        if pedido_existente:
+            # PEDIDO EXISTENTE: Adiciona novos itens ao pedido atual
+            print(f"[PEDIDO] Adicionando {len(novos_itens)} itens ao pedido existente: {pedido_existente.get('id_pedido')}")
+            
+            # Calcula próximo item_id baseado nos itens existentes
+            itens_existentes = pedido_existente.get("itens", [])
+            proximo_item_id = len(itens_existentes) + 1
+            
+            # Atualiza item_id dos novos itens
+            for i, item in enumerate(novos_itens):
+                item["item_id"] = proximo_item_id + i
+            
+            # Adiciona novos itens aos existentes
+            itens_atualizados = itens_existentes + novos_itens
+            valor_total_atualizado = pedido_existente.get("valor_total", 0) + valor_novos_itens
+            
+            # Atualiza o pedido no banco
+            coll3.update_one(
+                {"id_pedido": pedido_existente.get("id_pedido")},
                 {
-                    "status": "Aguardando definição de entrega",
-                    "data": datetime.utcnow().isoformat(),
-                    "descricao": "Pedido criado e aguardando definição de entrega/retirada"
+                    "$set": {
+                        "itens": itens_atualizados,
+                        "valor_total": round(valor_total_atualizado, 2),
+                        "valor_total_final": round(valor_total_atualizado, 2),
+                        "data_atualizacao": datetime.utcnow().isoformat()
+                    },
+                    "$push": {
+                        "historico_status": {
+                            "status": "Itens adicionados",
+                            "data": datetime.utcnow().isoformat(),
+                            "descricao": f"Adicionados {len(novos_itens)} novos itens ao pedido"
+                        }
+                    }
                 }
-            ],
-            "estrutura_detalhada": {
-                "total_itens": len(itens_pedido),
-                "itens_por_produto": {},
-                "resumo_cozinha": [],
-                "resumo_caixa": [],
-                "resumo_entregador": []
+            )
+            
+            # Atualiza o pedido no state
+            pedido_existente["itens"] = itens_atualizados
+            pedido_existente["valor_total"] = round(valor_total_atualizado, 2)
+            pedido_existente["valor_total_final"] = round(valor_total_atualizado, 2)
+            
+            if state:
+                state["pedido"] = pedido_existente
+                state["status_pedido"] = "itens_adicionados"
+            
+            pedido = pedido_existente
+            itens_pedido = itens_atualizados
+            valor_total = valor_total_atualizado
+            
+        else:
+            # NOVO PEDIDO: Cria um pedido completamente novo
+            print(f"[PEDIDO] Criando novo pedido com {len(novos_itens)} itens")
+            
+            id_pedido = str(uuid.uuid4())[:8]
+            
+            # Atualiza item_id dos novos itens
+            for i, item in enumerate(novos_itens):
+                item["item_id"] = i + 1
+            
+            # Cria estrutura completa do pedido
+            pedido = {
+                "id_pedido": id_pedido,
+                "cliente": {"nome": nome_cliente, "telefone": telefone},
+                "itens": novos_itens,
+                "valor_total": round(valor_novos_itens, 2),
+                "status": "Aguardando definição de entrega",
+                "data_criacao": datetime.utcnow().isoformat(),
+                "data_atualizacao": datetime.utcnow().isoformat(),
+                "tipo_entrega": None,  # será preenchido depois
+                "endereco_entrega": None,
+                "forma_pagamento": None,
+                "valor_entrega": 0.0,
+                "valor_total_final": round(valor_novos_itens, 2),  # Inicialmente igual ao valor do pedido
+                "historico_status": [
+                    {
+                        "status": "Aguardando definição de entrega",
+                        "data": datetime.utcnow().isoformat(),
+                        "descricao": "Pedido criado e aguardando definição de entrega/retirada"
+                    }
+                ],
+                "estrutura_detalhada": {
+                    "total_itens": len(novos_itens),
+                    "itens_por_produto": {},
+                    "resumo_cozinha": [],
+                    "resumo_caixa": [],
+                    "resumo_entregador": []
+                }
             }
-        }
-        
-        # Preenche estrutura detalhada
-        for item in itens_pedido:
-            produto_nome = item["produto"]
-            if produto_nome not in pedido["estrutura_detalhada"]["itens_por_produto"]:
-                pedido["estrutura_detalhada"]["itens_por_produto"][produto_nome] = []
             
-            pedido["estrutura_detalhada"]["itens_por_produto"][produto_nome].append({
-                "item_id": item["item_id"],
-                "adicionais": item["adicionais"],
-                "observacoes": item["observacoes"],
-                "subtotal": item["subtotal"]
-            })
+            # Salva no MongoDB
+            coll3.insert_one(pedido)
+            print(f"[PEDIDO] Novo pedido salvo no MongoDB: {id_pedido}")
             
-            # Resumo para cozinha
-            resumo_cozinha = f"Item {item['item_id']}: {item['produto']}"
-            if item['adicionais']:
-                resumo_cozinha += f" + {', '.join([ad['nome'] for ad in item['adicionais']])}"
-            if item['observacoes']:
-                resumo_cozinha += f" | {item['observacoes']}"
-            pedido["estrutura_detalhada"]["resumo_cozinha"].append(resumo_cozinha)
+            # Atualiza o state
+            if state:
+                state["pedido"] = pedido
+                state["status_pedido"] = "pedido_anotado"
             
-            # Resumo para caixa
-            resumo_caixa = f"Item {item['item_id']}: {item['produto']} = R$ {item['subtotal']:.2f}"
-            pedido["estrutura_detalhada"]["resumo_caixa"].append(resumo_caixa)
+            itens_pedido = novos_itens
+            valor_total = valor_novos_itens
+        
+        # 5) Atualiza estrutura detalhada (só para pedidos novos)
+        if not pedido_existente:
+            # Preenche estrutura detalhada para pedidos novos
+            for item in itens_pedido:
+                produto_nome = item["produto"]
+                if produto_nome not in pedido["estrutura_detalhada"]["itens_por_produto"]:
+                    pedido["estrutura_detalhada"]["itens_por_produto"][produto_nome] = []
+                
+                pedido["estrutura_detalhada"]["itens_por_produto"][produto_nome].append({
+                    "item_id": item["item_id"],
+                    "adicionais": item["adicionais"],
+                    "observacoes": item["observacoes"],
+                    "subtotal": item["subtotal"]
+                })
+                
+                # Resumo para cozinha
+                resumo_cozinha = f"Item {item['item_id']}: {item['produto']}"
+                if item['adicionais']:
+                    resumo_cozinha += f" + {', '.join([ad['nome'] for ad in item['adicionais']])}"
+                if item['observacoes']:
+                    resumo_cozinha += f" | {item['observacoes']}"
+                pedido["estrutura_detalhada"]["resumo_cozinha"].append(resumo_cozinha)
+                
+                # Resumo para caixa
+                resumo_caixa = f"Item {item['item_id']}: {item['produto']} = R$ {item['subtotal']:.2f}"
+                pedido["estrutura_detalhada"]["resumo_caixa"].append(resumo_caixa)
+                
+                # Resumo para entregador
+                resumo_entregador = f"Item {item['item_id']}: {item['produto']}"
+                if item['observacoes']:
+                    resumo_entregador += f" ({item['observacoes']})"
+                pedido["estrutura_detalhada"]["resumo_entregador"].append(resumo_entregador)
             
-            # Resumo para entregador
-            resumo_entregador = f"Item {item['item_id']}: {item['produto']}"
-            if item['observacoes']:
-                resumo_entregador += f" ({item['observacoes']})"
-            pedido["estrutura_detalhada"]["resumo_entregador"].append(resumo_entregador)
+            # Atualiza estrutura detalhada no banco
+            coll3.update_one(
+                {"id_pedido": pedido["id_pedido"]},
+                {"$set": {"estrutura_detalhada": pedido["estrutura_detalhada"]}}
+            )
         
-        coll3.insert_one(pedido)
-        print(f"[v1] Pedido salvo no MongoDB: {id_pedido}")
-        
-        # Atualiza o estado
-        if state is not None and isinstance(state, dict):
-            state["pedido"] = pedido
-            state["status_pedido"] = "pedido_anotado"
-        
-        # 5) Monta resposta detalhada para o cliente
+        # 6) Monta resposta detalhada para o cliente
         resumo_itens = []
         for item in itens_pedido:
             linha = f"• {item['produto']} (R$ {item['valor_unitario']:.2f})"
@@ -1075,30 +1167,42 @@ def processar_pedido_full(text: str,
             linha += f" = R$ {item['subtotal']:.2f}"
             resumo_itens.append(linha)
         
-        mensagem = (
-            f"✅ *Pedido anotado com sucesso!*\n\n"
-            f"🆔 *ID:* {id_pedido}\n"
-            f"👤 *Cliente:* {nome_cliente}\n"
-            f"📦 *Total de itens:* {len(itens_pedido)}\n\n"
-            f"📋 *Itens do pedido:*\n" + "\n".join(resumo_itens) + "\n\n"
-            f"💰 *Valor total:* R$ {pedido['valor_total']:.2f}\n\n"
-            f"🚗 *Agora preciso saber:* É para **RETIRADA** ou **ENTREGA**?"
-        )
+        # Mensagem diferenciada para pedido existente vs novo
+        if pedido_existente:
+            mensagem = (
+                f"✅ *Itens adicionados ao pedido!*\n\n"
+                f"🆔 *ID:* {pedido['id_pedido']}\n"
+                f"👤 *Cliente:* {nome_cliente}\n"
+                f"📦 *Total de itens:* {len(itens_pedido)}\n\n"
+                f"📋 *Itens do pedido:*\n" + "\n".join(resumo_itens) + "\n\n"
+                f"💰 *Valor total:* R$ {pedido['valor_total']:.2f}\n\n"
+                f"🚗 *Agora preciso saber:* É para **RETIRADA** ou **ENTREGA**?"
+            )
+        else:
+            mensagem = (
+                f"✅ *Pedido anotado com sucesso!*\n\n"
+                f"🆔 *ID:* {pedido['id_pedido']}\n"
+                f"👤 *Cliente:* {nome_cliente}\n"
+                f"📦 *Total de itens:* {len(itens_pedido)}\n\n"
+                f"📋 *Itens do pedido:*\n" + "\n".join(resumo_itens) + "\n\n"
+                f"💰 *Valor total:* R$ {pedido['valor_total']:.2f}\n\n"
+                f"🚗 *Agora preciso saber:* É para **RETIRADA** ou **ENTREGA**?"
+            )
         
-        # 6) Retorna estrutura completa para o app Django
+        # 7) Retorna estrutura completa para o app Django
         return {
             "success": True,
             "order": {
-                "id_pedido": id_pedido,
+                "id_pedido": pedido["id_pedido"],
                 "valor_total": pedido["valor_total"],
                 "total_itens": len(itens_pedido),
                 "itens": itens_pedido,
-                "estrutura_detalhada": pedido["estrutura_detalhada"]
+                "estrutura_detalhada": pedido.get("estrutura_detalhada", {})
             },
             "message": mensagem,
-            "estrutura_cozinha": pedido["estrutura_detalhada"]["resumo_cozinha"],
-            "estrutura_caixa": pedido["estrutura_detalhada"]["resumo_caixa"],
-            "estrutura_entregador": pedido["estrutura_detalhada"]["resumo_entregador"]
+            "estrutura_cozinha": pedido.get("estrutura_detalhada", {}).get("resumo_cozinha", []),
+            "estrutura_caixa": pedido.get("estrutura_detalhada", {}).get("resumo_caixa", []),
+            "estrutura_entregador": pedido.get("estrutura_detalhada", {}).get("resumo_entregador", [])
         }
         
     except Exception as e:
@@ -1600,8 +1704,12 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
             
             if telefone:
                 print(f"[PAGAMENTO_DINHEIRO] Buscando pedido para telefone: {telefone}")
+                # Busca pedidos do usuário que ainda não foram pagos
                 pedido_db = coll3.find_one(
-                    {"cliente.telefone": telefone},
+                    {
+                        "cliente.telefone": telefone,
+                        "status": {"$in": ["Aguardando definição de entrega", "Aguardando forma de pagamento", "Confirmado - Preparando"]}
+                    },
                     sort=[("data_criacao", -1)]
                 )
                 
@@ -1610,18 +1718,20 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
                     id_pedido = pedido_db.get("id_pedido")
                     valor_pedido = pedido_db.get("valor_total", 0)
                     valor_entrega = pedido_db.get("valor_entrega", 0)
-                    print(f"[PAGAMENTO_DINHEIRO] Pedido encontrado pelo telefone: {id_pedido}")
+                    print(f"[PAGAMENTO_DINHEIRO] Pedido encontrado pelo telefone: {id_pedido} - Status: {pedido_db.get('status')}")
                     # Atualiza o state com o pedido encontrado
                     if state:
                         state["pedido"] = pedido_db
                 else:
                     print(f"[PAGAMENTO_DINHEIRO] Pedido não encontrado pelo telefone")
             
-            # Se não encontrou pelo telefone, busca o último pedido criado
+            # Se não encontrou pelo telefone, busca o último pedido criado que ainda não foi pago
             if not pedido:
-                print(f"[PAGAMENTO_DINHEIRO] Buscando último pedido criado...")
+                print(f"[PAGAMENTO_DINHEIRO] Buscando último pedido não pago...")
                 pedido_db = coll3.find_one(
-                    {},
+                    {
+                        "status": {"$in": ["Aguardando definição de entrega", "Aguardando forma de pagamento", "Confirmado - Preparando"]}
+                    },
                     sort=[("data_criacao", -1)]
                 )
                 
@@ -1630,12 +1740,12 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
                     id_pedido = pedido_db.get("id_pedido")
                     valor_pedido = pedido_db.get("valor_total", 0)
                     valor_entrega = pedido_db.get("valor_entrega", 0)
-                    print(f"[PAGAMENTO_DINHEIRO] Último pedido encontrado: {id_pedido}")
+                    print(f"[PAGAMENTO_DINHEIRO] Último pedido não pago encontrado: {id_pedido} - Status: {pedido_db.get('status')}")
                     # Atualiza o state com o pedido encontrado
                     if state:
                         state["pedido"] = pedido_db
                 else:
-                    print(f"[PAGAMENTO_DINHEIRO] Nenhum pedido encontrado no sistema")
+                    print(f"[PAGAMENTO_DINHEIRO] Nenhum pedido não pago encontrado no sistema")
                     return "❌ Erro: pedido não encontrado no sistema."
         
         # Verifica se encontrou o pedido
@@ -1643,8 +1753,23 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
             print(f"[PAGAMENTO_DINHEIRO] ERRO: Pedido não encontrado após todas as tentativas")
             return "❌ Erro: pedido não encontrado no sistema."
         
+        # Verifica se o pedido encontrado é válido para pagamento
+        status_pedido = pedido.get("status", "")
+        if status_pedido in ["Enviado para cozinha", "Finalizado", "Cancelado"]:
+            print(f"[PAGAMENTO_DINHEIRO] ERRO: Pedido {id_pedido} já foi processado (status: {status_pedido})")
+            return "❌ Erro: Este pedido já foi processado anteriormente."
+        
         # Calcula valor total
         valor_total = valor_pedido + valor_entrega
+        
+        # Log detalhado dos valores
+        print(f"[PAGAMENTO_DINHEIRO] Valores calculados:")
+        print(f"[PAGAMENTO_DINHEIRO] - Valor pedido: R$ {valor_pedido:.2f}")
+        print(f"[PAGAMENTO_DINHEIRO] - Valor entrega: R$ {valor_entrega:.2f}")
+        print(f"[PAGAMENTO_DINHEIRO] - Valor total: R$ {valor_total:.2f}")
+        print(f"[PAGAMENTO_DINHEIRO] - Valor cliente: R$ {valor_cliente:.2f}")
+        print(f"[PAGAMENTO_DINHEIRO] - Status do pedido: {status_pedido}")
+        print(f"[PAGAMENTO_DINHEIRO] - ID do pedido: {id_pedido}")
         
         # Verifica se o valor é suficiente
         if valor_cliente < valor_total:
@@ -1668,6 +1793,8 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
             "status_pagamento": "confirmado"
         }
         
+        print(f"[PAGAMENTO_DINHEIRO] Atualizando pedido {id_pedido} com dados: {dados_pagamento}")
+        
         atualizar_status_pedido(
             pedido_id=id_pedido,
             novo_status="Enviado para cozinha",
@@ -1680,6 +1807,19 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
             state["forma_pagamento"] = "dinheiro"
             state["valor_troco"] = troco
             state["status_pedido"] = "confirmado"
+            # Atualiza o pedido no state com os dados de pagamento
+            if "pedido" in state:
+                state["pedido"]["forma_pagamento"] = "dinheiro"
+                state["pedido"]["valor_recebido"] = valor_cliente
+                state["pedido"]["troco"] = troco
+                state["pedido"]["status"] = "Enviado para cozinha"
+        
+        # Log final da mensagem
+        print(f"[PAGAMENTO_DINHEIRO] Montando mensagem final com valores:")
+        print(f"[PAGAMENTO_DINHEIRO] - ID: {id_pedido}")
+        print(f"[PAGAMENTO_DINHEIRO] - Total: R$ {valor_total:.2f}")
+        print(f"[PAGAMENTO_DINHEIRO] - Valor recebido: R$ {valor_cliente:.2f}")
+        print(f"[PAGAMENTO_DINHEIRO] - Troco: R$ {troco:.2f}")
         
         if troco > 0:
             mensagem = (
@@ -1705,10 +1845,11 @@ def processar_pagamento_dinheiro(valor_cliente: float, state: dict = None) -> st
                 f"💳 *Pagamento:* Dinheiro"
             )
         
+        print(f"[PAGAMENTO_DINHEIRO] Mensagem final montada com sucesso")
         return mensagem
         
     except Exception as e:
-        print(f"[v0] Erro ao processar pagamento em dinheiro: {str(e)}")
+        print(f"[PAGAMENTO_DINHEIRO] Erro ao processar pagamento em dinheiro: {str(e)}")
         return f"❌ Erro ao processar pagamento: {str(e)}"
 
 @tool("atualizar_nome_usuario")
